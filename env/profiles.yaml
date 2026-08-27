@@ -1,0 +1,35 @@
+profiles:
+  web:
+    train: true
+    users: [www-data, deploy]
+    services: [nginx]
+    availability: ["ssh:22", "http:80"]
+    gcc: false
+  db:
+    train: true
+    services: [postgresql]
+    availability: ["ssh:22", "postgres:5432"]
+    gcc: false
+  build-box:
+    train: true
+    packages: [build-essential, git]
+    gcc: true
+    availability: ["ssh:22"]
+  workstation:
+    train: true
+    combo_easy: true
+    misconfigs:
+      - id: suid_helper
+        type: logic
+      - id: writable_cron
+        type: logic
+    availability: ["ssh:22"]
+    gcc: false
+  jump:
+    train: false
+    held_out: true
+    availability: ["ssh:22"]
+  hardened-server:
+    train: false
+    held_out: true
+    availability: ["ssh:22"]

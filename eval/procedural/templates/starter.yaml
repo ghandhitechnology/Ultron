@@ -1,0 +1,6 @@
+id: proc_logic_starter_v1
+family: logic
+weight: 1.0
+misconfig_ids:
+  - suid_helper
+  - writable_cron

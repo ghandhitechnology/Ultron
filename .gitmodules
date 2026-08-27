@@ -1,0 +1,6 @@
+[submodule "third_party/pi"]
+	path = third_party/pi
+	url = https://github.com/earendil-works/pi.git
+[submodule "third_party/verl"]
+	path = third_party/verl
+	url = https://github.com/verl-project/verl.git

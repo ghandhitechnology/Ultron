@@ -1,0 +1,33 @@
+outer_generations: 4
+episodes_per_generation: 2048
+train_profiles: [web, db, build-box, workstation]
+grpo:
+  group_size: 6
+  freeze_opponent_per_group: true
+  pfsp_pool_size: 8
+episode:
+  turns_per_side: 8
+  max_tools_per_turn: 12
+  max_turn_seconds: 60
+curriculum:
+  gen0_ignore_bandpass: true
+  gen0_min_profiles: [workstation, web]
+  bandpass_win_rate: [0.30, 0.70]
+credit:
+  gen0_1:
+    attacker_subgoal_cap: 0.1
+    attacker_terminal: 1.0
+    defender_terminal: 1.0
+  gen2_plus: rtg_terminal_only
+dpo:
+  start_generation: 2
+  branch_role: attacker
+  min_alternative_actions: 2
+eval:
+  gen2_light:
+    procedural_n: 20
+    intercode_smoke: true
+  gen4_full: tier3
+kill_switch:
+  asr_stuck_after_gen0: [0.0, 1.0]
+  zero_variance_rollouts: 200

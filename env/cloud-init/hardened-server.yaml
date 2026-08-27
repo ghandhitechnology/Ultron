@@ -1,0 +1,14 @@
+#cloud-config
+hostname: ultron-hardened-server
+users:
+  - default
+  - name: attacker
+    groups: [users]
+    shell: /bin/bash
+packages: [openssh-server]
+write_files:
+  - path: /etc/ultron/profile.json
+    permissions: "0644"
+    content: '{"profile_id":"hardened-server","held_out":true,"misconfig_ids":[]}'
+runcmd:
+  - [systemctl, enable, ssh]

@@ -1,0 +1,29 @@
+<domain type="kvm">
+  <name>ultron-VM_ID</name>
+  <memory unit="MiB">4096</memory>
+  <vcpu placement="static">2</vcpu>
+  <os>
+    <type arch="x86_64" machine="q35">hvm</type>
+    <boot dev="hd"/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode="host-passthrough"/>
+  <devices>
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2" cache="none"/>
+      <source file="SNAPSHOT_PATH"/>
+      <target dev="vda" bus="virtio"/>
+    </disk>
+    <interface type="network">
+      <source network="ultron-isolated"/>
+      <model type="virtio"/>
+    </interface>
+    <vsock model="virtio">
+      <cid auto="no" address="VSOCK_CID"/>
+    </vsock>
+    <console type="pty"/>
+  </devices>
+</domain>

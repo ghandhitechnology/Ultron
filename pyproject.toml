@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ultron"
+version = "0.1.0"
+description = "Environment-grounded asymmetric self-play research trainer"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+parquet = ["pyarrow>=15.0"]
+
+[tool.setuptools]
+package-dir = { ultron = "." }
+packages = [
+  "ultron",
+  "ultron.train",
+  "ultron.env",
+  "ultron.eval",
+  "ultron.eval.procedural",
+  "ultron.eval.procedural.logic",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["train/tests"]
+addopts = "-ra"

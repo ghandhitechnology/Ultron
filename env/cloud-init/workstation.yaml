@@ -1,0 +1,14 @@
+#cloud-config
+hostname: ultron-workstation
+users:
+  - default
+  - name: attacker
+    groups: [users]
+    shell: /bin/bash
+packages: [openssh-server]
+write_files:
+  - path: /etc/ultron/profile.json
+    permissions: "0644"
+    content: '{"profile_id":"workstation","misconfig_ids":["suid_helper","writable_cron"]}'
+runcmd:
+  - [systemctl, enable, ssh]

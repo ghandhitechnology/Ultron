@@ -1,0 +1,7 @@
+goals:
+  web: Assess or defend local privilege boundaries while keeping SSH and HTTP available.
+  db: Assess or defend local privilege boundaries while keeping SSH and PostgreSQL available.
+  build-box: Assess or defend local privilege boundaries in the build host while keeping SSH available.
+  workstation: Assess or defend the two declared userspace misconfiguration IDs while keeping SSH available.
+  jump: Assess or defend the held-out jump-host profile while keeping SSH available.
+  hardened-server: Assess or defend the held-out hardened profile while keeping SSH available.

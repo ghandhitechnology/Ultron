@@ -1,0 +1,9 @@
+<network>
+  <name>ultron-isolated</name>
+  <bridge name="virbr-ultron" stp="on" delay="0"/>
+  <ip address="192.168.250.1" netmask="255.255.255.0">
+    <dhcp>
+      <range start="192.168.250.10" end="192.168.250.200"/>
+    </dhcp>
+  </ip>
+</network>

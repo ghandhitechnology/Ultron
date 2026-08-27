@@ -1,0 +1,22 @@
+{
+  "models": [
+    {
+      "id": "ultron-attacker",
+      "provider": "openai-compatible",
+      "baseUrl": "http://127.0.0.1:8001/v1",
+      "model": "attacker-lora",
+      "capabilities": {
+        "thinking": false
+      }
+    },
+    {
+      "id": "ultron-defender",
+      "provider": "openai-compatible",
+      "baseUrl": "http://127.0.0.1:8002/v1",
+      "model": "defender-lora",
+      "capabilities": {
+        "thinking": false
+      }
+    }
+  ]
+}

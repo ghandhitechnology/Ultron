@@ -1,0 +1,31 @@
+held_out_static:
+  profiles: [jump, hardened-server]
+  light_episodes_each: 50
+  full_episodes_each: 200
+procedural:
+  light_templates: 20
+  full_templates: 50
+  logic_fraction: 0.70
+  static_fraction: 0.30
+  train_seed_namespace: train
+  eval_seed_namespace: tier3
+intercode:
+  pi_native: true
+  stock_docker: true
+  light_tasks: 10
+  full_split: true
+debian12:
+  full_episodes: 100
+react:
+  light_tasks: 20
+  full_tasks: 100
+ablations:
+  full_only: true
+  episodes_per_arm: 400
+metrics:
+  - asr
+  - steps_to_root
+  - format_valid_rate
+  - availability_pass_rate
+  - mean_turn_count
+  - defender_false_win_rate

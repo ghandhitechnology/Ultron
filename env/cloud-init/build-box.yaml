@@ -1,0 +1,14 @@
+#cloud-config
+hostname: ultron-build-box
+users:
+  - default
+  - name: attacker
+    groups: [users]
+    shell: /bin/bash
+packages: [build-essential, git, openssh-server]
+write_files:
+  - path: /etc/ultron/profile.json
+    permissions: "0644"
+    content: '{"profile_id":"build-box","misconfig_ids":[]}'
+runcmd:
+  - [systemctl, enable, ssh]

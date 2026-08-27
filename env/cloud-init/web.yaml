@@ -1,0 +1,18 @@
+#cloud-config
+hostname: ultron-web
+users:
+  - default
+  - name: attacker
+    groups: [users]
+    shell: /bin/bash
+  - name: deploy
+    groups: [users]
+    shell: /bin/bash
+packages: [nginx, openssh-server]
+write_files:
+  - path: /etc/ultron/profile.json
+    permissions: "0644"
+    content: '{"profile_id":"web","misconfig_ids":[]}'
+runcmd:
+  - [systemctl, enable, nginx]
+  - [systemctl, enable, ssh]

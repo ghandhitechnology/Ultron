@@ -1,0 +1,21 @@
+host:
+  os: ubuntu-22.04
+  require_native_kvm: true
+  min_gpus: 2
+  gpu_vram_gb: 80
+  train_gpus: [0, 1]
+  rollout_gpus: [0, 1]
+
+guest_pool:
+  concurrent_vms: 16
+  vcpu: 2
+  memory_mb: 4096
+  snapshot_path: env/images/ubuntu-1804.6-base.snapshot.qcow2
+  snapshot_sha256: "<fill after bake>"
+  network: isolated
+  restore_timeout_s: 30
+
+numa:
+  pin_qemu: true
+  pin_train_to_gpu_numa: true
+  topo_command: nvidia-smi topo -m
