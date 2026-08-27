@@ -13,7 +13,6 @@ class ProbeResult:
 
 
 def adjudicate(probe: ProbeResult) -> tuple[ReasonCode, float, float]:
-    """Return the precedence-ordered terminal result and role rewards."""
     if not probe.infra_ok:
         return ReasonCode.INFRA_FAIL, 0.0, 0.0
     if probe.guest_attacker_euid == 0 and probe.host_confirmed_root:

@@ -51,11 +51,11 @@ def assign_group_opponent(
 def update_pool(entries: list[PoolEntry], new_entry: PoolEntry, limit: int = 8) -> list[PoolEntry]:
     if limit < 1:
         raise ValueError("pool limit must be positive")
-    deduplicated = [entry for entry in entries if entry.checkpoint_id != new_entry.checkpoint_id]
-    deduplicated.append(new_entry)
-    if len(deduplicated) <= limit:
-        return deduplicated
-    return sorted(deduplicated, key=pfsp_weight, reverse=True)[:limit]
+    updated = [entry for entry in entries if entry.checkpoint_id != new_entry.checkpoint_id]
+    updated.append(new_entry)
+    if len(updated) <= limit:
+        return updated
+    return sorted(updated, key=pfsp_weight, reverse=True)[:limit]
 
 
 def _main() -> None:

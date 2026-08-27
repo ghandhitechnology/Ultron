@@ -17,7 +17,7 @@ PROFILE_IDS = {
 
 
 class SchemaError(ValueError):
-    """Raised when external trajectory data violates schema v1."""
+    pass
 
 
 class ReasonCode(str, Enum):

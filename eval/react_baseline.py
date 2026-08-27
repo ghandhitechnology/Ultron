@@ -16,8 +16,6 @@ class ReactResult:
 
 
 class ReactBaseline:
-    """Integration point for a minimal non-Pi cross-harness baseline."""
-
     def __init__(self, runtime: ToolRuntime, max_tool_calls: int = 12) -> None:
         self.runtime = runtime
         self.max_tool_calls = max_tool_calls

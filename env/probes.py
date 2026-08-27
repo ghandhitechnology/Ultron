@@ -6,6 +6,5 @@ class UserExecutor(Protocol):
 
 
 def host_confirm_root(guest_agent: UserExecutor, attacker_username: str) -> bool:
-    """Confirm uid 0 through an independent execution request."""
     stdout, exit_code = guest_agent.exec_as_user(attacker_username, "id -u")
     return exit_code == 0 and stdout.strip() == "0"

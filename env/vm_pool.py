@@ -21,8 +21,6 @@ class VmHandle:
 
 
 class VmPool:
-    """A fixed-size lease pool. The libvirt backend owns VM lifecycle details."""
-
     def __init__(
         self,
         handles: list[VmHandle],

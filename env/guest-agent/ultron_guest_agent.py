@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Minimal newline-delimited JSON RPC server for an isolated Ultron guest."""
 
 import json
 import os

@@ -21,7 +21,6 @@ def extract_prefix_branch_pairs(
     same_profile: bool,
     same_prefix_hash: str,
 ) -> list[DpoPair]:
-    """Extract attacker-only action branches before the shared prefix diverges."""
     if not same_group or winner.group_id != loser.group_id:
         raise ValueError("DPO trajectories must share a group")
     if not same_profile or winner.profile_id != loser.profile_id:
