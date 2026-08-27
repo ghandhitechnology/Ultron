@@ -1,5 +1,7 @@
 # Ultron
 
+[Korean version](README.ko.md)
+
 Ultron is a research trainer for environment-grounded asymmetric self-play. Separate attacker and defender LoRAs act through Pi in isolated Ubuntu 18.04 KVM guests. A guest probe plus an independent host-side check adjudicates uid 0. Availability probes prevent the defender from scoring by breaking required services.
 
 This repository is research-ready scaffolding. Pure Python contracts, reward logic, PFSP sampling, DPO pair extraction, configuration, launch scripts, and tests run without GPUs or KVM. VM execution, Pi integration, vLLM serving, and training require the bare-metal setup in [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
