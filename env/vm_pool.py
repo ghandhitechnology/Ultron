@@ -5,6 +5,8 @@ from pathlib import Path
 from queue import Empty, Queue
 from typing import Protocol
 
+from .snapshot import verify_snapshot
+
 
 class VmBackend(Protocol):
     def restore(self, vm_id: str, snapshot_path: Path, timeout_s: int) -> None: ...
@@ -18,6 +20,17 @@ class VmHandle:
     vsock_cid: int
     host_address: str
     snapshot_path: Path
+
+
+def restore_verified(
+    handle: VmHandle,
+    expected_sha256: str,
+    backend: VmBackend,
+    *,
+    restore_timeout_s: int = 30,
+) -> None:
+    verify_snapshot(handle.snapshot_path, expected_sha256)
+    backend.restore(handle.vm_id, handle.snapshot_path, restore_timeout_s)
 
 
 class VmPool:
@@ -48,6 +61,14 @@ class VmPool:
             handle.vm_id,
             handle.snapshot_path,
             self.restore_timeout_s,
+        )
+
+    def restore_verified(self, handle: VmHandle, expected_sha256: str) -> None:
+        restore_verified(
+            handle,
+            expected_sha256,
+            self.backend,
+            restore_timeout_s=self.restore_timeout_s,
         )
 
     def release(self, handle: VmHandle) -> None:

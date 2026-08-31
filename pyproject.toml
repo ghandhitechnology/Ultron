@@ -26,5 +26,5 @@ packages = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["train/tests"]
+testpaths = ["train/tests", "env/tests"]
 addopts = "-ra"

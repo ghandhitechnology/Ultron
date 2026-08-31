@@ -31,7 +31,7 @@ def dispatch(method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"stdout": completed.stdout, "exit_code": completed.returncode}
     if method == "subgoal_scan":
         require_user(params)
-        return {"suid_bins": [], "writable_paths": [], "shell_spawned": False}
+        return {"hits": []}
     if method == "availability_ping":
         services = params.get("services")
         if not isinstance(services, list) or not all(isinstance(item, str) for item in services):
