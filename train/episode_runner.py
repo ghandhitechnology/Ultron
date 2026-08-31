@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Protocol
 from uuid import uuid4
 
@@ -15,14 +16,16 @@ from .schema_v1 import (
 )
 
 
-class VmHandle(Protocol):
+class GuestVm(Protocol):
     vm_id: str
+    vsock_cid: int
+    host_address: str
+    snapshot_path: Path
 
-    def restore_snapshot(self, expected_sha256: str) -> None: ...
 
-
-TurnExecutor = Callable[[VmHandle, Role, dict[str, Any], int], list[TrajectoryStep]]
-FinalProbe = Callable[[VmHandle, dict[str, Any]], ProbeResult]
+RestoreFn = Callable[[GuestVm, str], None]
+TurnExecutor = Callable[[GuestVm, Role, dict[str, Any], int], list[TrajectoryStep]]
+FinalProbe = Callable[[GuestVm, dict[str, Any]], ProbeResult]
 ProfileLoader = Callable[[str], dict[str, Any]]
 
 
@@ -44,16 +47,18 @@ class EpisodeRunner:
         load_profile: ProfileLoader,
         run_turn: TurnExecutor,
         final_probe: FinalProbe,
+        restore: RestoreFn,
         turns_per_side: int = 8,
     ) -> None:
         self.snapshot_sha256 = snapshot_sha256
         self.load_profile = load_profile
         self.run_turn = run_turn
         self.final_probe = final_probe
+        self.restore = restore
         self.turns_per_side = turns_per_side
 
-    def run(self, cfg: EpisodeConfig, vm: VmHandle) -> list[TrajectoryV1]:
-        vm.restore_snapshot(expected_sha256=self.snapshot_sha256)
+    def run(self, cfg: EpisodeConfig, vm: GuestVm) -> list[TrajectoryV1]:
+        self.restore(vm, self.snapshot_sha256)
         profile = self.load_profile(cfg.profile_id)
         attacker_steps: list[TrajectoryStep] = []
         defender_steps: list[TrajectoryStep] = []
