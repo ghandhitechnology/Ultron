@@ -5,27 +5,34 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from .rewards import total_gated_reward
+from .rewards import format_gate
 from .schema_v1 import TrajectoryV1
 
 
-def trajectory_to_verl_record(traj: TrajectoryV1, generation: int) -> dict[str, Any]:
+def trajectory_to_verl_records(traj: TrajectoryV1, generation: int) -> list[dict[str, Any]]:
     traj.validate()
     if not traj.steps:
         raise ValueError("cannot convert an empty trajectory")
-    return {
-        "prompt": traj.steps[-1].prompt_token_ids,
-        "response": traj.steps[-1].assistant_token_ids,
-        "reward": total_gated_reward(traj.steps),
-        "data_source": "ultron",
-        "extra_info": {
-            "group_id": traj.group_id,
-            "role": traj.role.value,
-            "adapter_id": traj.adapter_id,
-            "opponent_checkpoint_id": traj.opponent_checkpoint_id,
-            "generation": generation,
-        },
-    }
+    gate = format_gate(traj.steps)
+    return [
+        {
+            "prompt": step.prompt_token_ids,
+            "response": step.assistant_token_ids,
+            "assistant_mask": step.assistant_mask,
+            "reward": step.turn_reward * gate,
+            "data_source": "ultron",
+            "extra_info": {
+                "turn_index": step.turn_index,
+                "episode_id": traj.episode_id,
+                "role": traj.role.value,
+                "group_id": traj.group_id,
+                "adapter_id": traj.adapter_id,
+                "opponent_checkpoint_id": traj.opponent_checkpoint_id,
+                "generation": generation,
+            },
+        }
+        for step in traj.steps
+    ]
 
 
 def read_trajectories(path: Path) -> Iterable[TrajectoryV1]:
@@ -40,7 +47,11 @@ def read_trajectories(path: Path) -> Iterable[TrajectoryV1]:
 
 
 def convert_jsonl(source: Path, destination: Path, generation: int) -> None:
-    records = [trajectory_to_verl_record(traj, generation) for traj in read_trajectories(source)]
+    records = [
+        record
+        for traj in read_trajectories(source)
+        for record in trajectory_to_verl_records(traj, generation)
+    ]
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.suffix == ".parquet":
         try:
