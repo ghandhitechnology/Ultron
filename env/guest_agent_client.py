@@ -34,8 +34,12 @@ class GuestAgentClient:
             raise GuestAgentError("probe response has invalid euid")
         return euid
 
-    def subgoal_scan(self, username: str) -> dict[str, Any]:
-        return self._rpc("subgoal_scan", {"username": username})
+    def subgoal_scan(self, username: str) -> list[str]:
+        result = self._rpc("subgoal_scan", {"username": username})
+        hits = result.get("hits")
+        if not isinstance(hits, list) or not all(isinstance(item, str) for item in hits):
+            raise GuestAgentError("subgoal_scan response has invalid hits")
+        return hits
 
     def exec_as_user(self, username: str, cmd: str) -> tuple[str, int]:
         result = self._rpc("exec_as_user", {"username": username, "cmd": cmd})
