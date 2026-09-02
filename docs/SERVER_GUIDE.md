@@ -414,13 +414,26 @@ Run one generation:
 The script runs these phases in order:
 
 1. Roll out 2048 episodes unless `ULTRON_EPISODES` overrides the count.
-2. Convert and train the attacker adapter with GRPO.
-3. Convert and train the defender adapter with GRPO.
-4. Run attacker prefix-branch DPO for generation 2 and later.
-5. Archive every training checkpoint for the generation and refresh `data/archives/FINAL.sh`.
-6. Update the PFSP manifest.
-7. Trigger the generation-2 light or generation-4 full evaluation plan.
-8. Check ASR 0/1 kill-switch metrics when present.
+2. Write a rollout review under `data/traces/genN/review.md`.
+3. Convert and train the attacker adapter with GRPO.
+4. Convert and train the defender adapter with GRPO.
+5. Run attacker prefix-branch DPO for generation 2 and later.
+6. Archive every training checkpoint for the generation and refresh `data/archives/FINAL.sh`.
+7. Update the PFSP manifest.
+8. Trigger the generation-2 light or generation-4 full evaluation plan.
+9. Write the complete-run review. This is the researcher check for how the work went.
+10. Check ASR 0/1 kill-switch metrics when present.
+
+After rollout, and again after archive, PFSP, and eval, the job writes `review.md` and `review.json` next to the traces. The markdown report is the researcher-facing flow analysis. It covers windowed ASR, outcome mix by profile and opponent, reward health, tool flow, infra integrity, completeness of eval and archive artifacts, and a findings table with a `usable` / `caution` / `unusable` verdict.
+
+Re-run the same command yourself after a job:
+
+```bash
+python -m ultron.train.review data/traces/gen0 --phase complete --generation 0 \
+  --eval-dir data/eval --archive-dir data/archives --pfsp data/checkpoints/pfsp_pool.json
+```
+
+`--strict` exits 2 on `unusable` and 1 on `caution`. The generation script does not pass `--strict`. The kill-switch still owns the hard ASR 0/1 stop. Read `review.md` even when the script exits 0. A green kill-switch does not mean the run is scientifically usable.
 
 Use `ULTRON_EPISODES=10` only for plumbing checks. It is not a research run.
 
@@ -458,6 +471,8 @@ ps -eo pid,psr,pcpu,pmem,cmd | egrep 'qemu|vllm|verl'
 df -h
 du -sh data/traces data/checkpoints 2>/dev/null
 ```
+
+After the job finishes, open `data/traces/genN/review.md` before digging into raw JSONL. The window table is the mid-progress view reconstructed from episode order. It is the first place to see collapse, warmup, or infra spikes that a single ASR hides.
 
 Log these identifiers with every trajectory:
 
