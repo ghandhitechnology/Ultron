@@ -337,12 +337,17 @@ Pass when all result rows and aggregate metrics exist under `data/eval/` and the
 Install a vLLM version compatible with the pinned Qwen model in the project environment. Cache model weights on local NVMe. After a generation, archive the serveable LoRAs:
 
 ```bash
+# Default (qwen-4b)
 ./scripts/archive_weights.sh
 # or one generation:
 ./scripts/archive_weights.sh --generation 0
+
+# For other model families:
+ULTRON_MODEL_FAMILY=qwen-8b ./scripts/archive_weights.sh --generation 0
+ULTRON_MODEL_FAMILY=gemma ./scripts/archive_weights.sh --generation 0
 ```
 
-That copies every PEFT snapshot under the training `genN` dirs into `data/archives/genN/checkpoints/`, writes the last serveable adapters as `data/archives/final/`, and writes `data/archives/FINAL.sh`. `FINAL.sh` prints those paths; `FINAL.sh attacker` / `FINAL.sh defender` / `FINAL.sh checkpoints` select them. Serve scripts call `FINAL.sh` first. For a manual generation-0 drop before the first train:
+That copies every PEFT snapshot under the training `genN` dirs into `data/archives/genN/checkpoints/` (or `data/families/<name>/archives/genN/checkpoints/` when a family is selected), writes the last serveable adapters as `data/archives/final/` (or `data/families/<name>/archives/final/`), and writes `FINAL.sh`. `FINAL.sh` prints those paths; `FINAL.sh attacker` / `FINAL.sh defender` / `FINAL.sh checkpoints` select them. Serve scripts call `FINAL.sh` first via `scripts/resolve_adapter.sh`. For a manual generation-0 drop before the first train:
 
 ```text
 data/archives/final/attacker_lora
@@ -415,8 +420,13 @@ The DPO command must accept:
 Run one generation. The script starts session `ultron-gen-0` and keeps running if the SSH session dies:
 
 ```bash
+# Default (qwen-4b)
 ./scripts/run_generation.sh 0
 ./scripts/tmux_job.sh attach ultron-gen-0
+
+# Or with an explicit model family:
+./scripts/run_generation.sh --family qwen-8b 0
+./scripts/run_generation.sh --family gemma 0
 ```
 
 The script runs these phases in order:
@@ -437,8 +447,15 @@ After rollout, and again after archive, PFSP, and eval, the job writes `review.m
 Re-run the same command yourself after a job:
 
 ```bash
+# Default (qwen-4b)
 python -m ultron.train.review data/traces/gen0 --phase complete --generation 0 \
   --eval-dir data/eval --archive-dir data/archives --pfsp data/checkpoints/pfsp_pool.json
+
+# For other model families, pass the family archive and manifest paths (or run via ultron-sim):
+python -m ultron.train.review data/traces/gen0 --phase complete --generation 0 \
+  --eval-dir data/eval \
+  --archive-dir data/families/gemma/archives \
+  --pfsp data/families/gemma/checkpoints/pfsp_pool.json
 ```
 
 `--strict` exits 2 on `unusable` and 1 on `caution`. The generation script does not pass `--strict`. The kill-switch still owns the hard ASR 0/1 stop. Read `review.md` even when the script exits 0. A green kill-switch does not mean the run is scientifically usable.
@@ -470,19 +487,20 @@ The stock Docker InterCode runner is an integration stub. Keep Docker outside th
 
 ## 13. Operational checks during a run
 
-Watch CPU, memory, guest state, disks, GPUs, and job sessions:
+Watch CPU, memory, guest state, disks, GPUs, and job sessions via CLI or the experiment console (`ultron-sim`, press `j` for jobs):
 
 ```bash
 ./scripts/tmux_job.sh list
 ./scripts/tmux_job.sh logs ultron-gen-0
 watch -n 2 nvidia-smi
-virsh -c qemu:///system list --all
+virsh -c qemu:///system list --all # for KVM backend
+docker ps                          # for Docker backend
 ps -eo pid,psr,pcpu,pmem,cmd | egrep 'qemu|vllm|verl'
 df -h
-du -sh data/traces data/checkpoints 2>/dev/null
+du -sh data/traces data/checkpoints data/families 2>/dev/null
 ```
 
-After the job finishes, open `data/traces/genN/review.md` before digging into raw JSONL. The window table is the mid-progress view reconstructed from episode order. It is the first place to see collapse, warmup, or infra spikes that a single ASR hides.
+After the job finishes, open `data/traces/genN/review.md` before digging into raw JSONL, or inspect the summary in the experiment console (`ultron-sim`, press `r`). The window table is the mid-progress view reconstructed from episode order. It is the first place to see collapse, warmup, or infra spikes that a single ASR hides.
 
 Log these identifiers with every trajectory:
 
