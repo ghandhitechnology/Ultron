@@ -124,7 +124,7 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#job-table", DataTable).add_columns("session", "state", "pid", "command")
         self.query_one("#result-table", DataTable).add_columns("gen", "verdict", "episodes", "asr", "review")
         self.set_interval(0.2, self._tick)
-        self.set_interval(0.16, self._animate)
+        self.set_interval(0.16, self._tick_pixels)
         self._show(View.CATALOG)
         if not self.query("#form Input"):
             self._select_action(self.selected)
@@ -344,7 +344,7 @@ class ConsoleApp(App[GymPlan | None]):
             self._drain_events()
             self._poll_run_logs()
 
-    def _animate(self) -> None:
+    def _tick_pixels(self) -> None:
         self._pixel_tick += 1
         self._paint_sprites()
 

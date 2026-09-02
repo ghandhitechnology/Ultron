@@ -83,7 +83,7 @@ class SimApp(App[None]):
     def on_mount(self) -> None:
         self.query_one("#detail", Static).display = False
         self.set_interval(0.05, self._drain)
-        self.set_interval(0.16, self._animate)
+        self.set_interval(0.16, self._tick_pixels)
         self._paint()
 
     def action_cycle_pixel(self) -> None:
@@ -118,7 +118,7 @@ class SimApp(App[None]):
         if drained:
             self._paint()
 
-    def _animate(self) -> None:
+    def _tick_pixels(self) -> None:
         self._pixel_tick += 1
         self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
         self.query_one("#status", Static).update(

@@ -27,7 +27,7 @@ def test_console_lists_every_catalog_action() -> None:
             assert app.view is View.CATALOG
             sprites = app.query_one("#sprites")
             assert sprites.display is True
-            body = str(sprites.renderable)
+            body = str(sprites.content)
             assert "exploiter" in body
             assert "vision" in body
 
