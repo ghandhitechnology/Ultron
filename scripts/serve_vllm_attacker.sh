@@ -23,7 +23,7 @@ fi
 
 CUDA_VISIBLE_DEVICES="${ULTRON_ATTACKER_GPU:-0}" \
 python -m vllm.entrypoints.openai.api_server \
-  --model "${ULTRON_BASE_MODEL}" \
+  --model "${ULTRON_PACK_BASE_MODEL}" \
   --enable-lora \
   --lora-modules "attacker-lora=${ADAPTER}" \
   "${chat_kwargs[@]}" \

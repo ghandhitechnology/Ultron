@@ -178,12 +178,12 @@ def test_export_environ_keys_and_cli() -> None:
     pack = resolve(environ={})
     exported = pack.export_environ()
     assert exported["ULTRON_MODEL_FAMILY"] == "qwen-4b"
-    assert exported["ULTRON_BASE_MODEL"] == "Qwen/Qwen3.5-4B"
+    assert exported["ULTRON_PACK_BASE_MODEL"] == "Qwen/Qwen3.5-4B"
     assert exported["ULTRON_GRPO_CONFIG_NAME"] == "train_grpo"
     assert exported["ULTRON_VLLM_MAX_MODEL_LEN"] == "32768"
     assert set(exported) == {
         "ULTRON_MODEL_FAMILY",
-        "ULTRON_BASE_MODEL",
+        "ULTRON_PACK_BASE_MODEL",
         "ULTRON_MODEL_CONFIG",
         "ULTRON_GRPO_CONFIG_PATH",
         "ULTRON_GRPO_CONFIG_NAME",
@@ -210,7 +210,7 @@ def test_export_environ_keys_and_cli() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "declare -x ULTRON_MODEL_FAMILY=qwen-4b" in result.stdout
-    assert "declare -x ULTRON_BASE_MODEL=Qwen/Qwen3.5-4B" in result.stdout
+    assert "declare -x ULTRON_PACK_BASE_MODEL=Qwen/Qwen3.5-4B" in result.stdout
 
 
 def test_lib_family_exports_survive_the_function() -> None:
@@ -218,7 +218,7 @@ def test_lib_family_exports_survive_the_function() -> None:
     set -euo pipefail
     source scripts/lib_family.sh
     ultron_load_family
-    printf '%s\\n' "${ULTRON_MODEL_FAMILY}" "${ULTRON_BASE_MODEL}" "${ULTRON_CHECKPOINT_ROOT}"
+    printf '%s\\n' "${ULTRON_MODEL_FAMILY}" "${ULTRON_PACK_BASE_MODEL}" "${ULTRON_CHECKPOINT_ROOT}"
     """
     result = subprocess.run(
         ["bash", "-c", script],
@@ -233,6 +233,37 @@ def test_lib_family_exports_survive_the_function() -> None:
     assert family == "qwen-4b"
     assert base == "Qwen/Qwen3.5-4B"
     assert checkpoints.endswith("/data/checkpoints")
+
+
+def test_lib_family_can_switch_and_rejects_unknown() -> None:
+    script = """
+    set -euo pipefail
+    source scripts/lib_family.sh
+    export ULTRON_MODEL_FAMILY=qwen-8b
+    ultron_load_family
+    printf '%s %s\\n' "${ULTRON_MODEL_FAMILY}" "${ULTRON_PACK_BASE_MODEL}"
+    export ULTRON_MODEL_FAMILY=gemma
+    ultron_load_family
+    printf '%s %s\\n' "${ULTRON_MODEL_FAMILY}" "${ULTRON_PACK_BASE_MODEL}"
+    export ULTRON_MODEL_FAMILY=llama-8b
+    if ultron_load_family; then
+      echo load-should-fail
+      exit 1
+    fi
+    """
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        env={k: v for k, v in os.environ.items() if k not in {"ULTRON_MODEL_FAMILY", "ULTRON_BASE_MODEL"}},
+    )
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.splitlines()
+    assert lines[0] == "qwen-8b Qwen/Qwen3-8B"
+    assert lines[1] == "gemma google/gemma-2-9b-it"
+    assert "unknown model family" in result.stderr
 
 
 def test_load_base_model_fallback_matches_default_pack(tmp_path: Path) -> None:

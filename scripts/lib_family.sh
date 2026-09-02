@@ -14,5 +14,7 @@ ultron_load_family() {
     py="python3"
   fi
   # declare -x inside a function is local. -g keeps the job pin in the caller.
-  eval "$(cd "${root}" && "${py}" -m ultron.train.family export | sed 's/^declare -x /declare -gx /')"
+  local exported
+  exported="$(cd "${root}" && "${py}" -m ultron.train.family export)" || return 2
+  eval "$(printf '%s\n' "${exported}" | sed 's/^declare -x /declare -gx /')"
 }

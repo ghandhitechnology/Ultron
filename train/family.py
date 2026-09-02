@@ -85,7 +85,7 @@ class FamilyPack:
         )
         return {
             "ULTRON_MODEL_FAMILY": self.name.value,
-            "ULTRON_BASE_MODEL": self.base_model,
+            "ULTRON_PACK_BASE_MODEL": self.base_model,
             "ULTRON_MODEL_CONFIG": str(self.model_config),
             "ULTRON_GRPO_CONFIG_PATH": str(self.grpo_config_dir),
             "ULTRON_GRPO_CONFIG_NAME": self.grpo_config_name,
