@@ -12,7 +12,7 @@ if [[ ! -d "${ADAPTER}" ]]; then
   echo "Attacker adapter not found: ${ADAPTER}" >&2
   exit 2
 fi
-ultron_maybe_tmux "ultron-vllm-attacker"
+ultron_maybe_tmux "ultron-vllm-attacker" "$@"
 
 CUDA_VISIBLE_DEVICES="${ULTRON_ATTACKER_GPU:-0}" \
 python -m vllm.entrypoints.openai.api_server \

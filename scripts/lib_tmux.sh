@@ -8,6 +8,7 @@ ultron_maybe_tmux() {
     echo "ultron_maybe_tmux: session name required" >&2
     return 2
   fi
+  shift
   if [[ "${ULTRON_NO_TMUX:-}" == "1" || -n "${ULTRON_TMUX_SESSION:-}" ]]; then
     return 0
   fi

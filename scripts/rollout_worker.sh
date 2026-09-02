@@ -23,7 +23,7 @@ if [[ -z "${ULTRON_ROLLOUT_COMMAND:-}" ]]; then
   echo "Set ULTRON_ROLLOUT_COMMAND to the M3-verified Pi/guest rollout launcher." >&2
   exit 2
 fi
-ultron_maybe_tmux "ultron-rollout-gen${GENERATION}"
+ultron_maybe_tmux "ultron-rollout-gen${GENERATION}" "$@"
 
 mkdir -p "data/traces/gen${GENERATION}"
 exec "${ULTRON_ROLLOUT_COMMAND}" \

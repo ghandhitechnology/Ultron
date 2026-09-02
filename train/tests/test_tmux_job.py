@@ -156,9 +156,14 @@ def test_wrap_run_generation_detaches(job_env: dict[str, str]) -> None:
     assert "Started ultron-gen-0" in result.stdout
     try:
         wait_until(
-            lambda: "Set ULTRON_ROLLOUT_COMMAND"
+            lambda: "=== Ultron generation 0 ==="
+            in run_job(["logs", "ultron-gen-0"], job_env).stdout
+            and "Set ULTRON_ROLLOUT_COMMAND"
             in run_job(["logs", "ultron-gen-0"], job_env).stdout
         )
+        logs = run_job(["logs", "ultron-gen-0"], job_env).stdout
+        assert "=== Ultron generation 0 ===" in logs
+        assert "=== Ultron generation ultron-gen-0 ===" not in logs
     finally:
         run_job(["stop", "ultron-gen-0"], job_env)
 
@@ -173,7 +178,7 @@ def test_nested_scripts_stay_in_parent_session(job_env: dict[str, str], tmp_path
                 "#!/usr/bin/env bash",
                 "set -euo pipefail",
                 f'source "{ROOT}/scripts/lib_tmux.sh"',
-                "ultron_maybe_tmux ultrontest-parent",
+                "ultron_maybe_tmux ultrontest-parent \"$@\"",
                 f'echo "parent=${{ULTRON_TMUX_SESSION:-}}" > "{seen}"',
                 f'bash "{child}"',
                 "sleep 20",
@@ -187,7 +192,7 @@ def test_nested_scripts_stay_in_parent_session(job_env: dict[str, str], tmp_path
                 "#!/usr/bin/env bash",
                 "set -euo pipefail",
                 f'source "{ROOT}/scripts/lib_tmux.sh"',
-                "ultron_maybe_tmux ultrontest-child",
+                "ultron_maybe_tmux ultrontest-child \"$@\"",
                 f'echo "child=${{ULTRON_TMUX_SESSION:-}}" >> "{seen}"',
             ]
         )
