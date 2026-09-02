@@ -36,7 +36,7 @@ Do not place guest images, traces, model weights, credentials, or checkpoints in
 
 ## Repository map
 
-- `train/` owns trajectory schema v1, adjudication, rewards, RAE, PFSP, DPO pairing, conversion, curriculum, and orchestration interfaces.
+- `train/` owns trajectory schema v1, adjudication, rewards, RAE, PFSP, DPO pairing, conversion, curriculum, post-run job review, and orchestration interfaces.
 - `env/` owns guest RPC, host probes, availability, snapshots, the VM pool, cloud-init profiles, and libvirt templates.
 - `harness/` defines the Pi-facing TypeScript execution and turn interfaces.
 - `eval/` defines tier-3 plans, procedural selection, InterCode integration points, and the ReAct baseline interface.

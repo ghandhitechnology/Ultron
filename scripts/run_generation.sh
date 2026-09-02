@@ -8,6 +8,11 @@ EPISODES="${ULTRON_EPISODES:-2048}"
 
 echo "=== Ultron generation ${GEN} ==="
 "${ROOT}/scripts/rollout_worker.sh" --generation "${GEN}" --episodes "${EPISODES}"
+python -m ultron.train.review \
+  "data/traces/gen${GEN}" \
+  --phase rollout \
+  --generation "${GEN}" \
+  --output "data/traces/gen${GEN}"
 "${ROOT}/scripts/train_grpo.sh" --role attacker --generation "${GEN}"
 "${ROOT}/scripts/train_grpo.sh" --role defender --generation "${GEN}"
 
@@ -22,6 +27,15 @@ if [[ "${GEN}" -eq 2 ]]; then
 elif [[ "${GEN}" -eq 4 ]]; then
   python -m ultron.eval.run_tier3 --mode full
 fi
+
+python -m ultron.train.review \
+  "data/traces/gen${GEN}" \
+  --phase complete \
+  --generation "${GEN}" \
+  --output "data/traces/gen${GEN}" \
+  --eval-dir data/eval \
+  --archive-dir data/archives \
+  --pfsp data/checkpoints/pfsp_pool.json
 
 METRICS="data/traces/gen${GEN}/metrics.json"
 if [[ -f "${METRICS}" ]]; then
