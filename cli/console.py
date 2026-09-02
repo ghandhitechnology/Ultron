@@ -36,7 +36,7 @@ from ultron.cli.jobs import (
     start_session,
     stop_session,
 )
-from ultron.cli.pixel import PixelStyle, advance_style_tick, mascot_strip, style_at
+from ultron.cli.pixel import mascot_strip
 from ultron.cli.results import (
     ResultsError,
     discover_generations,
@@ -70,7 +70,6 @@ class ConsoleApp(App[GymPlan | None]):
         Binding("t", "focus_tests", "tests", show=True),
         Binding("m", "focus_family", "model", show=True),
         Binding("s", "stop_job", "stop", show=True),
-        Binding("p", "cycle_pixel", "pixel", show=True),
         Binding("g", "refresh", "refresh", show=False),
     ]
 
@@ -157,10 +156,6 @@ class ConsoleApp(App[GymPlan | None]):
             return
         if self.view in (View.JOBS, View.RESULTS):
             self._show(View.CATALOG)
-
-    def action_cycle_pixel(self) -> None:
-        self._pixel_tick = advance_style_tick(self._pixel_tick)
-        self._paint_sprites()
 
     def action_refresh(self) -> None:
         if self.view is View.JOBS:
@@ -350,8 +345,6 @@ class ConsoleApp(App[GymPlan | None]):
 
     def _paint_sprites(self) -> None:
         self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
-        if self.view is View.CATALOG:
-            self._set_status(_footer(self.view, pixel_style=style_at(self._pixel_tick)))
 
     def _drain_events(self) -> None:
         log = self.query_one("#run-log", RichLog)
@@ -460,7 +453,7 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#sprites").display = view is View.CATALOG
         self.query_one("#header-title", Static).update(_header(view))
         self._paint_sprites()
-        self._set_status(_footer(view, pixel_style=style_at(self._pixel_tick)))
+        self._set_status(_footer(view))
 
     def _set_status(self, text: str) -> None:
         self.query_one("#status", Static).update(f"  {text}")
@@ -484,11 +477,10 @@ def _header(view: View) -> str:
             raise ValueError(f"unhandled view {view!r}")
 
 
-def _footer(view: View, *, pixel_style: PixelStyle | None = None) -> str:
-    pixel = "" if pixel_style is None else f" · pixel {pixel_style.value}"
+def _footer(view: View) -> str:
     match view:
         case View.CATALOG:
-            return f"enter run · m model · j jobs · r results · t tests · p pixel{pixel} · q quit"
+            return "enter run · m model · j jobs · r results · t tests · q quit"
         case View.JOBS:
             return "enter logs · s stop · g refresh · esc back · q quit"
         case View.RESULTS:

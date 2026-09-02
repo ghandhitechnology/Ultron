@@ -10,7 +10,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import RichLog, Static
 
 from ultron.cli.model import InvalidTransition, JobMeta, JobSnapshot, Phase, apply, initial_snapshot
-from ultron.cli.pixel import advance_style_tick, mascot_strip, style_at
+from ultron.cli.pixel import mascot_strip
 from ultron.cli.render import (
     attacker_pane,
     defender_pane,
@@ -44,7 +44,6 @@ class SimApp(App[None]):
         Binding("s", "expand('sandbox')", "sandbox", show=True),
         Binding("d", "expand('defender')", "defender", show=True),
         Binding("t", "expand('tool')", "tool", show=True),
-        Binding("p", "cycle_pixel", "pixel", show=True),
         Binding("l", "collapse", "log", show=False),
     ]
 
@@ -86,10 +85,6 @@ class SimApp(App[None]):
         self.set_interval(0.16, self._tick_pixels)
         self._paint()
 
-    def action_cycle_pixel(self) -> None:
-        self._pixel_tick = advance_style_tick(self._pixel_tick)
-        self._paint()
-
     def action_expand(self, pane: str) -> None:
         self.expanded = pane
         self._paint()
@@ -121,18 +116,13 @@ class SimApp(App[None]):
     def _tick_pixels(self) -> None:
         self._pixel_tick += 1
         self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
-        self.query_one("#status", Static).update(
-            footer_line(self.snapshot, sim=self.sim, pixel_style=style_at(self._pixel_tick))
-        )
 
     def _paint(self) -> None:
         snap = self.snapshot
         self.query_one("#header", Static).update(header_line(snap))
         self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
         self.query_one("#progress", Static).update(progress_block(snap))
-        self.query_one("#status", Static).update(
-            footer_line(snap, sim=self.sim, pixel_style=style_at(self._pixel_tick))
-        )
+        self.query_one("#status", Static).update(footer_line(snap, sim=self.sim))
         arena = self.query_one("#arena", Horizontal)
         detail = self.query_one("#detail", Static)
         if self.expanded:

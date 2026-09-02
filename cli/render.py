@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from ultron.cli.model import JobProgress, JobSnapshot, Phase, estimate_eta_s, progress
-from ultron.cli.pixel import PixelStyle
 from ultron.train.schema_v1 import ReasonCode, Role
 
 BLOCK = "█"
@@ -48,18 +47,11 @@ def header_line(snapshot: JobSnapshot) -> str:
     )
 
 
-def footer_line(
-    snapshot: JobSnapshot,
-    *,
-    sim: bool = True,
-    pixel_style: PixelStyle | None = None,
-) -> str:
+def footer_line(snapshot: JobSnapshot, *, sim: bool = True) -> str:
     mode = "SIM MODE" if sim else "LIVE"
-    pixel = "" if pixel_style is None else f"   pixel {pixel_style.value}"
     return (
         f"  ultron v{snapshot.meta.version}   generation {snapshot.meta.generation}   "
-        f"{snapshot.meta.profile_id}   {snapshot.meta.isolation.value}{pixel}"
-        f"                {mode}"
+        f"{snapshot.meta.profile_id}   {snapshot.meta.isolation.value}                {mode}"
     )
 
 
@@ -78,7 +70,7 @@ def progress_block(snapshot: JobSnapshot) -> str:
         f"{format_bar(ep_ratio, 28)}{mean}\n"
         f"  TURNS     {_turn_display(snapshot, prog):>2} / {prog.total_turns:<2}   "
         f"{format_bar(turn_ratio, 28)}   {snapshot.phase.value}\n"
-        f"  {_outcome_strip(snapshot)}   click a/s/d/t · p pixel · esc fold · q quit"
+        f"  {_outcome_strip(snapshot)}   click a/s/d/t · esc fold · q quit"
     )
 
 
