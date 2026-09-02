@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from ultron.env.backend import IsolationBackend
 from ultron.train.schema_v1 import (
     SCHEMA_VERSION,
     ReasonCode,
@@ -52,6 +53,7 @@ def make_trajectory() -> TrajectoryV1:
             attacker_reward=0.0,
             defender_reward=1.0,
         ),
+        isolation_backend=IsolationBackend.KVM,
     )
 
 

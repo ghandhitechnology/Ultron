@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Mapping
 
+from ultron.env.backend import IsolationBackend
+
 SCHEMA_VERSION = "v1"
 PROFILE_IDS = {
     "web",
@@ -81,6 +83,7 @@ class TrajectoryV1:
     group_id: str
     steps: list[TrajectoryStep]
     terminal: TerminalOutcome
+    isolation_backend: IsolationBackend
 
     def validate(self) -> None:
         if self.schema_version != SCHEMA_VERSION:
@@ -91,6 +94,10 @@ class TrajectoryV1:
             raise SchemaError("generation must be non-negative")
         if self.profile_id not in PROFILE_IDS:
             raise SchemaError(f"unknown profile_id: {self.profile_id}")
+        try:
+            IsolationBackend(self.isolation_backend)
+        except ValueError as exc:
+            raise SchemaError(f"unknown isolation_backend: {self.isolation_backend}") from exc
         expected_adapter = f"{self.role.value}_lora"
         if self.adapter_id != expected_adapter:
             raise SchemaError(f"{self.role.value} trajectory requires adapter_id={expected_adapter}")
@@ -120,6 +127,7 @@ class TrajectoryV1:
             "group_id",
             "steps",
             "terminal",
+            "isolation_backend",
         }
         missing = required - data.keys()
         if missing:
@@ -140,6 +148,9 @@ class TrajectoryV1:
                 group_id=_str(data["group_id"], "group_id"),
                 steps=steps,
                 terminal=terminal,
+                isolation_backend=IsolationBackend(
+                    _str(data["isolation_backend"], "isolation_backend")
+                ),
             )
         except (TypeError, ValueError) as exc:
             raise SchemaError(str(exc)) from exc
@@ -261,5 +272,6 @@ TRAJECTORY_JSON_SCHEMA: dict[str, Any] = {
         "group_id",
         "steps",
         "terminal",
+        "isolation_backend",
     ],
 }

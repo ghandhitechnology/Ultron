@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable, Protocol
 from uuid import uuid4
+
+from ultron.env.backend import IsolationBackend
 
 from .adjudicator import ProbeResult, adjudicate
 from .rewards import assign_gen01_attacker_turn_rewards, assign_terminal_rtg
@@ -18,9 +19,9 @@ from .schema_v1 import (
 
 class GuestVm(Protocol):
     vm_id: str
-    vsock_cid: int
+    isolation: IsolationBackend
     host_address: str
-    snapshot_path: Path
+    image_ref: str
 
 
 RestoreFn = Callable[[GuestVm, str], None]
@@ -85,8 +86,8 @@ class EpisodeRunner:
         )
         episode_id = str(uuid4())
         return [
-            self._trajectory(cfg, episode_id, Role.ATTACKER, attacker_steps, terminal),
-            self._trajectory(cfg, episode_id, Role.DEFENDER, defender_steps, terminal),
+            self._trajectory(cfg, episode_id, Role.ATTACKER, attacker_steps, terminal, vm),
+            self._trajectory(cfg, episode_id, Role.DEFENDER, defender_steps, terminal, vm),
         ]
 
     @staticmethod
@@ -96,6 +97,7 @@ class EpisodeRunner:
         role: Role,
         steps: list[TrajectoryStep],
         terminal: TerminalOutcome,
+        vm: GuestVm,
     ) -> TrajectoryV1:
         return TrajectoryV1(
             schema_version=SCHEMA_VERSION,
@@ -108,4 +110,5 @@ class EpisodeRunner:
             group_id=cfg.group_id,
             steps=steps,
             terminal=terminal,
+            isolation_backend=vm.isolation,
         )

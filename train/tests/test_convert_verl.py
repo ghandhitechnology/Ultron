@@ -1,5 +1,6 @@
 import pytest
 
+from ultron.env.backend import IsolationBackend
 from ultron.train.convert_verl import trajectory_to_verl_records
 from ultron.train.schema_v1 import (
     SCHEMA_VERSION,
@@ -43,6 +44,7 @@ def make_trajectory(steps: list[TrajectoryStep]) -> TrajectoryV1:
             attacker_reward=0.0,
             defender_reward=1.0,
         ),
+        isolation_backend=IsolationBackend.KVM,
     )
 
 
