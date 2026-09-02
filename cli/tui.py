@@ -5,6 +5,7 @@ import threading
 from collections.abc import Iterable
 from pathlib import Path
 
+from ultron.cli.app import SimApp
 from ultron.cli.demo import origin_clock
 from ultron.cli.model import JobEvent, JobMeta, JobSnapshot, Phase, apply, initial_snapshot
 from ultron.cli.observe import EpisodeCase, drive_job
@@ -22,8 +23,6 @@ def run_live_job(
     screenshot: Path | None = None,
     sim: bool = True,
 ) -> JobSnapshot:
-    from ultron.cli.app import SimApp
-
     events: queue.Queue[JobEvent | object] = queue.Queue()
     clock = clock or origin_clock()
 
