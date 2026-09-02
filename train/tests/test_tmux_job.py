@@ -1,8 +1,8 @@
-from collections.abc import Iterator
 import os
 import signal
 import subprocess
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
