@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import sys
 import tarfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from typing import Any
 
 import yaml
 
+from .family import FamilyError, resolve
 from .pfsp import PoolEntry, load_pool, save_pool, update_pool
 from .schema_v1 import Role
 
@@ -248,18 +250,42 @@ def publish_final(archive_root: Path, generation: int, roles: dict[str, Any], ch
     return archive_root / FINAL_SCRIPT_NAME
 
 
+def _family_label(model_config: Path, resolved_family: str | None) -> str | None:
+    if resolved_family is not None:
+        return resolved_family
+    if not model_config.is_file():
+        return None
+    payload = yaml.safe_load(model_config.read_text()) or {}
+    family = payload.get("family") if isinstance(payload, dict) else None
+    if family is None:
+        return None
+    return str(family)
+
+
 def archive_generation(
     generation: int,
     *,
-    checkpoint_root: Path = DEFAULT_CHECKPOINT_ROOT,
-    archive_root: Path = DEFAULT_ARCHIVE_ROOT,
-    model_config: Path = DEFAULT_MODEL_CONFIG,
-    pfsp_manifest: Path = DEFAULT_PFSP_MANIFEST,
+    checkpoint_root: Path | None = None,
+    archive_root: Path | None = None,
+    model_config: Path | None = None,
+    pfsp_manifest: Path | None = None,
     pack: bool = True,
     publish: bool = True,
 ) -> dict[str, Any]:
     if generation < 0:
         raise ValueError("generation must be >= 0")
+    resolved_family: str | None = None
+    if checkpoint_root is None or archive_root is None or model_config is None or pfsp_manifest is None:
+        family_pack = resolve()
+        resolved_family = family_pack.name.value
+        if checkpoint_root is None:
+            checkpoint_root = family_pack.checkpoint_root
+        if archive_root is None:
+            archive_root = family_pack.archive_root
+        if model_config is None:
+            model_config = family_pack.model_config
+        if pfsp_manifest is None:
+            pfsp_manifest = family_pack.pfsp_manifest
     selected = [select_adapter(checkpoint_root, generation, role) for role in (Role.ATTACKER, Role.DEFENDER)]
     target = archive_dir(archive_root, generation)
     target.mkdir(parents=True, exist_ok=True)
@@ -293,6 +319,9 @@ def archive_generation(
             for item in checkpoints
         ],
     }
+    family = _family_label(model_config, resolved_family)
+    if family is not None:
+        manifest["family"] = family
     manifest_path = target / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     write_final_script(target / FINAL_SCRIPT_NAME, generation, len(checkpoints))
@@ -319,12 +348,22 @@ def archive_generation(
 
 def archive_all_generations(
     *,
-    checkpoint_root: Path = DEFAULT_CHECKPOINT_ROOT,
-    archive_root: Path = DEFAULT_ARCHIVE_ROOT,
-    model_config: Path = DEFAULT_MODEL_CONFIG,
-    pfsp_manifest: Path = DEFAULT_PFSP_MANIFEST,
+    checkpoint_root: Path | None = None,
+    archive_root: Path | None = None,
+    model_config: Path | None = None,
+    pfsp_manifest: Path | None = None,
     pack: bool = True,
 ) -> dict[str, Any]:
+    if checkpoint_root is None or archive_root is None or model_config is None or pfsp_manifest is None:
+        family_pack = resolve()
+        if checkpoint_root is None:
+            checkpoint_root = family_pack.checkpoint_root
+        if archive_root is None:
+            archive_root = family_pack.archive_root
+        if model_config is None:
+            model_config = family_pack.model_config
+        if pfsp_manifest is None:
+            pfsp_manifest = family_pack.pfsp_manifest
     generations = discover_generations(checkpoint_root)
     if not generations:
         raise FileNotFoundError(f"no genN directories under {checkpoint_root}")
@@ -393,31 +432,40 @@ def _main() -> None:
         help="Retrieve every genN directory under the training checkpoint root.",
     )
     parser.add_argument("--list", action="store_true")
-    parser.add_argument("--checkpoint-root", type=Path, default=DEFAULT_CHECKPOINT_ROOT)
-    parser.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
-    parser.add_argument("--model-config", type=Path, default=DEFAULT_MODEL_CONFIG)
-    parser.add_argument("--pfsp-manifest", type=Path, default=DEFAULT_PFSP_MANIFEST)
+    parser.add_argument("--checkpoint-root", type=Path)
+    parser.add_argument("--archive-root", type=Path)
+    parser.add_argument("--model-config", type=Path)
+    parser.add_argument("--pfsp-manifest", type=Path)
     parser.add_argument("--no-pack", action="store_true")
     args = parser.parse_args()
+    try:
+        family_pack = resolve()
+    except FamilyError as exc:
+        print(exc, file=sys.stderr)
+        raise SystemExit(2) from exc
+    checkpoint_root = args.checkpoint_root or family_pack.checkpoint_root
+    archive_root = args.archive_root or family_pack.archive_root
+    model_config = args.model_config or family_pack.model_config
+    pfsp_manifest = args.pfsp_manifest or family_pack.pfsp_manifest
     if args.list:
-        print(json.dumps(list_archives(args.archive_root), indent=2))
+        print(json.dumps(list_archives(archive_root), indent=2))
         return
     if args.all or args.generation is None:
         payload = archive_all_generations(
-            checkpoint_root=args.checkpoint_root,
-            archive_root=args.archive_root,
-            model_config=args.model_config,
-            pfsp_manifest=args.pfsp_manifest,
+            checkpoint_root=checkpoint_root,
+            archive_root=archive_root,
+            model_config=model_config,
+            pfsp_manifest=pfsp_manifest,
             pack=not args.no_pack,
         )
         print(json.dumps(payload, indent=2))
         return
     manifest = archive_generation(
         args.generation,
-        checkpoint_root=args.checkpoint_root,
-        archive_root=args.archive_root,
-        model_config=args.model_config,
-        pfsp_manifest=args.pfsp_manifest,
+        checkpoint_root=checkpoint_root,
+        archive_root=archive_root,
+        model_config=model_config,
+        pfsp_manifest=pfsp_manifest,
         pack=not args.no_pack,
     )
     print(json.dumps(manifest, indent=2))
