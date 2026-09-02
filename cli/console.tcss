@@ -24,6 +24,14 @@ Screen {
     content-align: left middle;
 }
 
+#sprites {
+    height: 9;
+    padding: 0 1;
+    color: #cdd6f4;
+    background: #11111b;
+    border-bottom: solid #45475a;
+}
+
 #family {
     width: 42;
     height: 3;

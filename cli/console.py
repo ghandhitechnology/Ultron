@@ -36,6 +36,7 @@ from ultron.cli.jobs import (
     start_session,
     stop_session,
 )
+from ultron.cli.pixel import PixelStyle, advance_style_tick, mascot_strip, style_at
 from ultron.cli.results import (
     ResultsError,
     discover_generations,
@@ -69,6 +70,7 @@ class ConsoleApp(App[GymPlan | None]):
         Binding("t", "focus_tests", "tests", show=True),
         Binding("m", "focus_family", "model", show=True),
         Binding("s", "stop_job", "stop", show=True),
+        Binding("p", "cycle_pixel", "pixel", show=True),
         Binding("g", "refresh", "refresh", show=False),
     ]
 
@@ -85,6 +87,7 @@ class ConsoleApp(App[GymPlan | None]):
         self._events: queue.Queue[object] = queue.Queue()
         self._log_cursor = 0
         self._done = False
+        self._pixel_tick = 0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="frame"):
@@ -99,6 +102,7 @@ class ConsoleApp(App[GymPlan | None]):
                     type_to_search=False,
                     id="family",
                 )
+            yield Static(id="sprites")
             with Horizontal(id="catalog"):
                 yield OptionList(id="actions")
                 with Vertical(id="detail"):
@@ -120,6 +124,7 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#job-table", DataTable).add_columns("session", "state", "pid", "command")
         self.query_one("#result-table", DataTable).add_columns("gen", "verdict", "episodes", "asr", "review")
         self.set_interval(0.2, self._tick)
+        self.set_interval(0.16, self._animate)
         self._show(View.CATALOG)
         if not self.query("#form Input"):
             self._select_action(self.selected)
@@ -152,6 +157,10 @@ class ConsoleApp(App[GymPlan | None]):
             return
         if self.view in (View.JOBS, View.RESULTS):
             self._show(View.CATALOG)
+
+    def action_cycle_pixel(self) -> None:
+        self._pixel_tick = advance_style_tick(self._pixel_tick)
+        self._paint_sprites()
 
     def action_refresh(self) -> None:
         if self.view is View.JOBS:
@@ -335,6 +344,15 @@ class ConsoleApp(App[GymPlan | None]):
             self._drain_events()
             self._poll_run_logs()
 
+    def _animate(self) -> None:
+        self._pixel_tick += 1
+        self._paint_sprites()
+
+    def _paint_sprites(self) -> None:
+        self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
+        if self.view is View.CATALOG:
+            self._set_status(_footer(self.view, pixel_style=style_at(self._pixel_tick)))
+
     def _drain_events(self) -> None:
         log = self.query_one("#run-log", RichLog)
         while True:
@@ -439,8 +457,10 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#jobs").display = view is View.JOBS
         self.query_one("#results").display = view is View.RESULTS
         self.query_one("#run").display = view is View.RUN
+        self.query_one("#sprites").display = view is View.CATALOG
         self.query_one("#header-title", Static).update(_header(view))
-        self._set_status(_footer(view))
+        self._paint_sprites()
+        self._set_status(_footer(view, pixel_style=style_at(self._pixel_tick)))
 
     def _set_status(self, text: str) -> None:
         self.query_one("#status", Static).update(f"  {text}")
@@ -464,10 +484,11 @@ def _header(view: View) -> str:
             raise ValueError(f"unhandled view {view!r}")
 
 
-def _footer(view: View) -> str:
+def _footer(view: View, *, pixel_style: PixelStyle | None = None) -> str:
+    pixel = "" if pixel_style is None else f" · pixel {pixel_style.value}"
     match view:
         case View.CATALOG:
-            return "enter run · m model · j jobs · r results · t tests · q quit"
+            return f"enter run · m model · j jobs · r results · t tests · p pixel{pixel} · q quit"
         case View.JOBS:
             return "enter logs · s stop · g refresh · esc back · q quit"
         case View.RESULTS:
