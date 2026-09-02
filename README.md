@@ -42,7 +42,7 @@ Do not place guest images, traces, model weights, credentials, or checkpoints in
 - `eval/` defines tier-3 plans, procedural selection, InterCode integration points, and the ReAct baseline interface.
 - `configs/` records the locked model, host, generation, training, and evaluation parameters.
 - `scripts/` contains host checks, vLLM launchers, rollout launch, and generation training entry points.
-- `cli/` is the live guest-gym dashboard (`ultron-sim demo`). It wraps `EpisodeRunner` callbacks and does not replace `train/review.py`.
+- `cli/` is the experiment console (`ultron-sim`) and live guest-gym dashboard (`ultron-sim demo`). The console launches generation, training, review, tests, and tmux jobs. It does not replace `train/review.py`.
 
 ## Long-running jobs
 
@@ -59,16 +59,18 @@ Generation, rollout, GRPO, DPO, and vLLM launchers start in named tmux sessions 
 
 Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
 
-## Live simulation dashboard
+## Experiment console
 
-`ultron-sim` is a full-screen TUI for one guest-gym job: attacker and defender turns, sandbox identity, a scrolling process log, progress, and ETA. It runs inside tmux. Click a pane (or press `a` / `s` / `d` / `t`) to expand detail.
+`ultron-sim` opens a full-screen TUI for the research loop: pick a generation, launch rollout or training, watch tmux jobs, run unit tests, and fetch `review.md` results.
 
 ```bash
 python -m pip install -e '.[tui]'
-ultron-sim demo
+ultron-sim
 ```
 
-The demo drives a real `EpisodeRunner` with stub guests so you can watch the layout without GPUs or VMs. Production attach wraps the same injected `restore` / `run_turn` / `final_probe` callables and leaves `EpisodeRunner.run` unchanged.
+Keys: `enter` runs the selected action, `j` lists jobs, `r` lists generation results, `t` jumps to tests, `s` stops a job, `q` quits.
+
+`ultron-sim demo` is the live guest-gym view: attacker and defender turns, sandbox identity, a scrolling process log, progress, and ETA. Click a pane (or press `a` / `s` / `d` / `t`) to expand detail. The demo drives a real `EpisodeRunner` with stub guests so you can watch the layout without GPUs or VMs. Production attach wraps the same injected `restore` / `run_turn` / `final_probe` callables and leaves `EpisodeRunner.run` unchanged. The console can open that gym as the "Live guest gym" action.
 
 ## Safety boundary
 

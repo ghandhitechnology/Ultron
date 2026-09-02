@@ -227,27 +227,29 @@ def apply(snapshot: JobSnapshot, event: JobEvent) -> JobSnapshot:
     recent = _bounded(snapshot.recent + (event,), EVENT_LIMIT)
     log = _bounded(snapshot.log + (_log_line(event),), LOG_LIMIT)
     base = replace(snapshot, recent=recent, log=log)
-    if isinstance(event, RestoreStarted):
-        return _restore_started(base, event)
-    if isinstance(event, RestoreFinished):
-        return _restore_finished(base, event)
-    if isinstance(event, TurnStarted):
-        return _turn_started(base, event)
-    if isinstance(event, TurnEnded):
-        return _turn_ended(base, event)
-    if isinstance(event, ToolObserved):
-        return _tool(base, event)
-    if isinstance(event, ProbeStarted):
-        return _probe_started(base, event)
-    if isinstance(event, ProbeFinished):
-        return _probe_finished(base, event)
-    if isinstance(event, EpisodeEnded):
-        return _episode_ended(base, event)
-    if isinstance(event, JobEnded):
-        return _job_ended(base, event)
-    if isinstance(event, JobError):
-        return replace(base, phase=Phase.FAILED, error=event.message)
-    raise InvalidTransition(f"unknown event {type(event)!r}")
+    match event:
+        case RestoreStarted():
+            return _restore_started(base, event)
+        case RestoreFinished():
+            return _restore_finished(base, event)
+        case TurnStarted():
+            return _turn_started(base, event)
+        case TurnEnded():
+            return _turn_ended(base, event)
+        case ToolObserved():
+            return _tool(base, event)
+        case ProbeStarted():
+            return _probe_started(base, event)
+        case ProbeFinished():
+            return _probe_finished(base, event)
+        case EpisodeEnded():
+            return _episode_ended(base, event)
+        case JobEnded():
+            return _job_ended(base, event)
+        case JobError():
+            return replace(base, phase=Phase.FAILED, error=event.message)
+        case _:
+            _assert_never(event)
 
 
 def _bounded(items: tuple, limit: int) -> tuple:
@@ -403,39 +405,41 @@ def _tool_label(tool: ToolEvent) -> str:
 
 def _log_line(event: JobEvent) -> str:
     stamp = _fmt_clock(getattr(event, "at_s", 0.0))
-    if isinstance(event, RestoreStarted):
-        return f"{stamp}  restore {event.guest_id}  {event.image_ref}"
-    if isinstance(event, RestoreFinished):
-        return f"{stamp}  restored {event.guest_id}  {event.host_address}  {_fmt_dur(event.duration_s)}"
-    if isinstance(event, TurnStarted):
-        return f"{stamp}  {event.role.value} turn {event.turn_index} started"
-    if isinstance(event, TurnEnded):
-        return f"{stamp}  {event.role.value} turn {event.turn_index} done  {_fmt_dur(event.duration_s)}"
-    if isinstance(event, ToolObserved):
-        code = "—" if event.tool.exit_code is None else str(event.tool.exit_code)
-        return (
-            f"{stamp}  {event.role.value}  {_tool_label(event.tool)}  "
-            f"exit {code}  {event.tool.duration_ms}ms"
-        )
-    if isinstance(event, ProbeStarted):
-        return f"{stamp}  probe episode {event.episode_index}"
-    if isinstance(event, ProbeFinished):
-        return (
-            f"{stamp}  probe euid={event.result.guest_attacker_euid} "
-            f"host_root={event.result.host_confirmed_root} "
-            f"avail={event.result.availability_ok}"
-        )
-    if isinstance(event, EpisodeEnded):
-        t = event.terminal
-        return (
-            f"{stamp}  episode {event.episode_index}  {t.reason_code.value}  "
-            f"a:{t.attacker_reward:g} d:{t.defender_reward:g}"
-        )
-    if isinstance(event, JobEnded):
-        return f"{stamp}  job complete  {_fmt_dur(event.duration_s)}"
-    if isinstance(event, JobError):
-        return f"{stamp}  error {event.operation}  {event.message}"
-    return f"{stamp}  {event.kind}"
+    match event:
+        case RestoreStarted():
+            return f"{stamp}  restore {event.guest_id}  {event.image_ref}"
+        case RestoreFinished():
+            return f"{stamp}  restored {event.guest_id}  {event.host_address}  {_fmt_dur(event.duration_s)}"
+        case TurnStarted():
+            return f"{stamp}  {event.role.value} turn {event.turn_index} started"
+        case TurnEnded():
+            return f"{stamp}  {event.role.value} turn {event.turn_index} done  {_fmt_dur(event.duration_s)}"
+        case ToolObserved():
+            code = "—" if event.tool.exit_code is None else str(event.tool.exit_code)
+            return (
+                f"{stamp}  {event.role.value}  {_tool_label(event.tool)}  "
+                f"exit {code}  {event.tool.duration_ms}ms"
+            )
+        case ProbeStarted():
+            return f"{stamp}  probe episode {event.episode_index}"
+        case ProbeFinished():
+            return (
+                f"{stamp}  probe euid={event.result.guest_attacker_euid} "
+                f"host_root={event.result.host_confirmed_root} "
+                f"avail={event.result.availability_ok}"
+            )
+        case EpisodeEnded():
+            t = event.terminal
+            return (
+                f"{stamp}  episode {event.episode_index}  {t.reason_code.value}  "
+                f"a:{t.attacker_reward:g} d:{t.defender_reward:g}"
+            )
+        case JobEnded():
+            return f"{stamp}  job complete  {_fmt_dur(event.duration_s)}"
+        case JobError():
+            return f"{stamp}  error {event.operation}  {event.message}"
+        case _:
+            _assert_never(event)
 
 
 def _fmt_clock(at_s: float) -> str:
@@ -447,3 +451,7 @@ def _fmt_dur(duration_s: float) -> str:
     if duration_s < 1:
         return f"{int(duration_s * 1000)}ms"
     return f"{duration_s:.1f}s"
+
+
+def _assert_never(value: object) -> None:
+    raise InvalidTransition(f"unhandled event {type(value)!r}")

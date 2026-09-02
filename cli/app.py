@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from queue import Empty, Queue
 
@@ -8,7 +9,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import RichLog, Static
 
-from ultron.cli.model import JobMeta, JobSnapshot, apply, initial_snapshot
+from ultron.cli.model import InvalidTransition, JobMeta, JobSnapshot, Phase, apply, initial_snapshot
 from ultron.cli.render import (
     attacker_pane,
     defender_pane,
@@ -99,7 +100,12 @@ class SimApp(App[None]):
             if item is self.sentinel:
                 self._done = True
                 break
-            self.snapshot = apply(self.snapshot, item)
+            try:
+                self.snapshot = apply(self.snapshot, item)
+            except InvalidTransition as exc:
+                if self.snapshot.phase in (Phase.COMPLETE, Phase.FAILED):
+                    break
+                self.snapshot = replace(self.snapshot, phase=Phase.FAILED, error=str(exc))
         if drained:
             self._paint()
 

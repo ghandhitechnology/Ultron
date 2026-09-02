@@ -28,3 +28,22 @@ def test_drive_demo_through_real_episode_runner() -> None:
     assert kinds[-1] == "job_ended"
     assert "tool" in kinds
     assert "probe_finished" in kinds
+
+
+def test_short_case_list_fails_instead_of_illegal_complete() -> None:
+    meta = JobMeta(
+        generation=0,
+        profile_id="web",
+        isolation=IsolationBackend.DOCKER,
+        episodes_planned=2,
+        turns_per_side=1,
+    )
+    runner, cases = make_demo(meta, delay_s=0.0, sleep=lambda _s: None)
+    events: list = []
+    drive_job(meta, runner, cases[:1], emit=events.append, clock=origin_clock())
+    snap = initial_snapshot(meta, started_at_s=0.0)
+    for event in events:
+        snap = apply(snap, event)
+    assert snap.phase is Phase.FAILED
+    assert snap.error is not None
+    assert "completed 1 of 2" in snap.error

@@ -138,6 +138,7 @@ def drive_job(
 ) -> None:
     job_started = clock()
     try:
+        completed = 0
         for index, case in enumerate(cases):
             if index >= meta.episodes_planned:
                 break
@@ -146,6 +147,8 @@ def drive_job(
             )
             episode_started = clock()
             trajectories = observed.run(case.config, case.vm)
+            if not trajectories:
+                raise RuntimeError(f"episode {index} produced no trajectories")
             emit(
                 EpisodeEnded(
                     episode_index=index,
@@ -155,6 +158,16 @@ def drive_job(
                     at_s=clock(),
                 )
             )
+            completed += 1
+        if completed != meta.episodes_planned:
+            emit(
+                JobError(
+                    message=f"completed {completed} of {meta.episodes_planned} episodes",
+                    operation="drive",
+                    at_s=clock(),
+                )
+            )
+            return
         emit(JobEnded(duration_s=clock() - job_started, at_s=clock()))
     except Exception as exc:
         emit(JobError(message=str(exc), operation="drive", at_s=clock()))
