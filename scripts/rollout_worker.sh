@@ -16,7 +16,7 @@ if [[ -z "${GENERATION}" || -z "${EPISODES}" ]]; then
   exit 2
 fi
 if [[ -z "${ULTRON_ROLLOUT_COMMAND:-}" ]]; then
-  echo "Set ULTRON_ROLLOUT_COMMAND to the M3-verified Pi/KVM rollout launcher." >&2
+  echo "Set ULTRON_ROLLOUT_COMMAND to the M3-verified Pi/guest rollout launcher." >&2
   exit 2
 fi
 
