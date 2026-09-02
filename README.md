@@ -80,7 +80,7 @@ python -m pip install -e '.[tui]'
 ultron-sim
 ```
 
-Keys: `enter` runs the selected action, `j` lists jobs, `r` lists generation results, `t` jumps to tests, `s` stops a job, `q` quits.
+Keys: `enter` runs the selected action, `m` focuses the model-family selector, `j` lists jobs, `r` lists generation results, `t` jumps to tests, `s` stops a job, `q` quits. The header selector pins `qwen-4b`, `qwen-8b`, or `gemma` for every launch. `ultron-sim --family gemma` sets the same pin before the console opens.
 
 `ultron-sim demo` is the live guest-gym view: attacker and defender turns, sandbox identity, a scrolling process log, progress, and ETA. Click a pane (or press `a` / `s` / `d` / `t`) to expand detail. The demo drives a real `EpisodeRunner` with stub guests so you can watch the layout without GPUs or VMs. Production attach wraps the same injected `restore` / `run_turn` / `final_probe` callables and leaves `EpisodeRunner.run` unchanged. The console can open that gym as the "Live guest gym" action.
 

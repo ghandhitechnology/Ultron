@@ -18,6 +18,18 @@ Screen {
     border-bottom: solid #45475a;
 }
 
+#header-title {
+    width: 1fr;
+    height: 3;
+    content-align: left middle;
+}
+
+#family {
+    width: 42;
+    height: 3;
+    background: #11111b;
+}
+
 #catalog {
     height: 1fr;
 }

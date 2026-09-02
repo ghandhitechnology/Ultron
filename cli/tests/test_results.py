@@ -26,6 +26,10 @@ def test_discover_and_load_review(tmp_path: Path) -> None:
     found = discover_generations(root=tmp_path)
     assert len(found) == 1
     assert found[0].generation == 2
+    family_archives = tmp_path / "data" / "families" / "gemma" / "archives" / "gen4"
+    family_archives.mkdir(parents=True)
+    family_only = discover_generations(root=tmp_path, archive_dir=family_archives.parent)
+    assert {item.generation for item in family_only} == {2, 4}
     assert found[0].metrics_path is not None
     review = load_review(traces)
     assert review is not None

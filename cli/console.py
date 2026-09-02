@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import queue
 import subprocess
 import threading
@@ -9,7 +10,7 @@ from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import DataTable, Input, Label, OptionList, RichLog, Static
+from textual.widgets import DataTable, Input, Label, OptionList, RichLog, Select, Static
 from textual.widgets.option_list import Option
 
 from ultron.cli.catalog import (
@@ -21,8 +22,10 @@ from ultron.cli.catalog import (
     LaunchPlan,
     TmuxPlan,
     all_actions,
+    family_options,
     plan,
     repo_root,
+    resolve_pack,
     spec_for,
 )
 from ultron.cli.jobs import (
@@ -39,6 +42,7 @@ from ultron.cli.results import (
     fetch_review,
     read_markdown,
 )
+from ultron.train.family import FamilyName, FamilyPack
 
 CSS_PATH = Path(__file__).with_name("console.tcss")
 SENTINEL = object()
@@ -63,13 +67,16 @@ class ConsoleApp(App[GymPlan | None]):
         Binding("j", "show_jobs", "jobs", show=True),
         Binding("r", "show_results", "results", show=True),
         Binding("t", "focus_tests", "tests", show=True),
+        Binding("m", "focus_family", "model", show=True),
         Binding("s", "stop_job", "stop", show=True),
         Binding("g", "refresh", "refresh", show=False),
     ]
 
-    def __init__(self, *, root: Path | None = None) -> None:
+    def __init__(self, *, root: Path | None = None, family: str | None = None) -> None:
         super().__init__()
         self.root = root or repo_root()
+        self.pack: FamilyPack = resolve_pack(family, root=self.root)
+        self.family: FamilyName = self.pack.name
         self.view = View.CATALOG
         self.selected = ActionId.GENERATION
         self._inputs: dict[str, Input] = {}
@@ -81,7 +88,17 @@ class ConsoleApp(App[GymPlan | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="frame"):
-            yield Static(id="header")
+            with Horizontal(id="header"):
+                yield Static(id="header-title")
+                yield Select[str](
+                    family_options(root=self.root),
+                    value=self.family.value,
+                    prompt="model",
+                    allow_blank=False,
+                    compact=True,
+                    type_to_search=False,
+                    id="family",
+                )
             with Horizontal(id="catalog"):
                 yield OptionList(id="actions")
                 with Vertical(id="detail"):
@@ -125,6 +142,9 @@ class ConsoleApp(App[GymPlan | None]):
         self._show(View.CATALOG)
         self._select_action(ActionId.TESTS)
         self._highlight_action(ActionId.TESTS)
+
+    def action_focus_family(self) -> None:
+        self.query_one("#family", Select).focus()
 
     def action_back(self) -> None:
         if self.view is View.RUN:
@@ -182,6 +202,11 @@ class ConsoleApp(App[GymPlan | None]):
         self._select_action(ActionId(event.option.id))
         self._run_selected()
 
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id != "family" or event.value is Select.NULL:
+            return
+        self._set_family(str(event.value))
+
     def _fill_actions(self) -> None:
         options: list[Option] = []
         last: ActionGroup | None = None
@@ -218,9 +243,23 @@ class ConsoleApp(App[GymPlan | None]):
         spec = spec_for(self.selected, root=self.root)
         return {field.key: self._inputs[field.key].value for field in spec.fields}
 
+    def _set_family(self, name: str) -> None:
+        try:
+            pack = resolve_pack(name, root=self.root)
+        except CatalogError as exc:
+            self._set_status(str(exc))
+            return
+        if pack.name is self.family:
+            return
+        self.pack = pack
+        self.family = pack.name
+        if self.view is View.RESULTS:
+            self._refresh_results()
+        self._set_status(f"family {pack.name.value}  {pack.base_model}")
+
     def _run_selected(self) -> None:
         try:
-            built = plan(self.selected, self._field_values(), root=self.root)
+            built = plan(self.selected, self._field_values(), root=self.root, family=self.family.value)
         except CatalogError as exc:
             self._set_status(str(exc))
             return
@@ -258,12 +297,15 @@ class ConsoleApp(App[GymPlan | None]):
 
         def worker() -> None:
             try:
+                env = os.environ.copy()
+                env.update(dict(built.env))
                 proc = subprocess.Popen(
                     list(built.argv),
                     cwd=str(built.cwd),
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    env=env,
                 )
                 assert proc.stdout is not None
                 for line in proc.stdout:
@@ -344,7 +386,7 @@ class ConsoleApp(App[GymPlan | None]):
     def _refresh_results(self) -> None:
         table = self.query_one("#result-table", DataTable)
         table.clear()
-        found = discover_generations(root=self.root)
+        found = discover_generations(root=self.root, archive_dir=self.pack.archive_root)
         if not found:
             self._set_status("no generations in data/traces or data/archives")
             return
@@ -369,8 +411,8 @@ class ConsoleApp(App[GymPlan | None]):
                 generation=generation,
                 phase="complete",
                 eval_dir=self.root / "data" / "eval",
-                archive_dir=self.root / "data" / "archives",
-                pfsp_path=self.root / "data" / "checkpoints" / "pfsp_pool.json",
+                archive_dir=self.pack.archive_root,
+                pfsp_path=self.pack.pfsp_manifest,
             )
         except ResultsError as exc:
             self._set_status(str(exc))
@@ -397,15 +439,15 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#jobs").display = view is View.JOBS
         self.query_one("#results").display = view is View.RESULTS
         self.query_one("#run").display = view is View.RUN
-        self.query_one("#header", Static).update(_header(view))
+        self.query_one("#header-title", Static).update(_header(view))
         self._set_status(_footer(view))
 
     def _set_status(self, text: str) -> None:
         self.query_one("#status", Static).update(f"  {text}")
 
 
-def run_console(*, root: Path | None = None) -> GymPlan | None:
-    return ConsoleApp(root=root).run()
+def run_console(*, root: Path | None = None, family: str | None = None) -> GymPlan | None:
+    return ConsoleApp(root=root, family=family).run()
 
 
 def _header(view: View) -> str:
@@ -425,7 +467,7 @@ def _header(view: View) -> str:
 def _footer(view: View) -> str:
     match view:
         case View.CATALOG:
-            return "enter run · j jobs · r results · t tests · q quit"
+            return "enter run · m model · j jobs · r results · t tests · q quit"
         case View.JOBS:
             return "enter logs · s stop · g refresh · esc back · q quit"
         case View.RESULTS:
