@@ -57,6 +57,30 @@ def test_generation_plan_sets_episode_env() -> None:
     assert built.session == "ultron-gen-3"
     assert built.argv[-1] == "3"
     assert ("ULTRON_EPISODES", "16") in built.env
+    assert ("ULTRON_MODEL_FAMILY", "qwen-4b") in built.env
+    assert built.argv[1:3] == ("--family", "qwen-4b")
+
+
+def test_family_pin_follows_the_selector() -> None:
+    built = plan(
+        ActionId.GENERATION,
+        {"generation": "1", "episodes": "8"},
+        root=ROOT,
+        family="gemma",
+    )
+    assert isinstance(built, TmuxPlan)
+    assert ("ULTRON_MODEL_FAMILY", "gemma") in built.env
+    assert built.argv[1:3] == ("--family", "gemma")
+    review = plan(ActionId.REVIEW, {"generation": "1", "phase": "complete"}, root=ROOT, family="gemma")
+    assert isinstance(review, ForegroundPlan)
+    assert ("ULTRON_MODEL_FAMILY", "gemma") in review.env
+    assert any(str(part).endswith("data/families/gemma/archives") for part in review.argv)
+    assert any(str(part).endswith("data/families/gemma/checkpoints/pfsp_pool.json") for part in review.argv)
+
+
+def test_unknown_family_is_rejected() -> None:
+    with pytest.raises(CatalogError, match="unknown model family"):
+        plan(ActionId.TESTS, {"suite": "cli"}, root=ROOT, family="llama-8b")
 
 
 def test_dpo_rejects_early_generation() -> None:

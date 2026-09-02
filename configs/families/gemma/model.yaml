@@ -1,5 +1,5 @@
-family: qwen-4b
-base_model: Qwen/Qwen3.5-4B
+family: gemma
+base_model: google/gemma-4-12B-it
 thinking:
   enable_thinking: false
 lora:
@@ -8,12 +8,11 @@ lora:
   target_modules: all-linear
   task_type: CAUSAL_LM
 adapters:
-  attacker: data/archives/final/attacker_lora
-  defender: data/archives/final/defender_lora
+  attacker: data/families/gemma/archives/final/attacker_lora
+  defender: data/families/gemma/archives/final/defender_lora
 serving:
   attacker_url: http://127.0.0.1:8001/v1
   defender_url: http://127.0.0.1:8002/v1
   max_model_len: 32768
   gpu_memory_utilization: 0.85
-  chat_template_kwargs:
-    enable_thinking: false
+  chat_template_kwargs: null

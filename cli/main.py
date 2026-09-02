@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from ultron import __version__
-from ultron.cli.catalog import GymPlan
+from ultron.cli.catalog import CatalogError, GymPlan, resolve_pack
 from ultron.cli.demo import make_demo
 from ultron.cli.model import JobMeta
 from ultron.env.backend import IsolationBackend
@@ -15,6 +15,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ultron-sim",
         description="Manage Ultron generations, jobs, tests, and live guest-gym rollouts.",
+    )
+    parser.add_argument(
+        "--family",
+        help="Base-model family for console launches: qwen-4b, qwen-8b, or gemma.",
     )
     sub = parser.add_subparsers(dest="cmd")
     demo = sub.add_parser("demo", help="Run a fake episode loop in the live TUI.")
@@ -28,13 +32,17 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="Write a Textual SVG screenshot after the demo job finishes.",
     )
-    sub.add_parser("console", help="Experiment control TUI for jobs, tests, and results.")
+    console = sub.add_parser("console", help="Experiment control TUI for jobs, tests, and results.")
+    console.add_argument(
+        "--family",
+        help="Base-model family for console launches: qwen-4b, qwen-8b, or gemma.",
+    )
     args = parser.parse_args(argv)
     if args.cmd == "demo":
         return _run_demo(args)
     if args.cmd not in {None, "console"}:
         parser.error("unknown command")
-    return _run_console()
+    return _run_console(family=args.family)
 
 
 def _run_demo(args: argparse.Namespace) -> int:
@@ -66,7 +74,12 @@ def _run_demo(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_console() -> int:
+def _run_console(*, family: str | None = None) -> int:
+    try:
+        resolve_pack(family)
+    except CatalogError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 2
     try:
         from ultron.cli.console import run_console
         from ultron.cli.tui import run_live_job
@@ -74,7 +87,7 @@ def _run_console() -> int:
         sys.stderr.write(_tui_install_hint(exc))
         return 2
     while True:
-        result = run_console()
+        result = run_console(family=family)
         if result is None:
             return 0
         if not isinstance(result, GymPlan):

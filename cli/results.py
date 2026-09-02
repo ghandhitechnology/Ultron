@@ -49,8 +49,13 @@ def archive_root(*, root: Path | None = None) -> Path:
     return (root or repo_root()) / "data" / "archives"
 
 
-def discover_generations(*, root: Path | None = None) -> tuple[GenerationArtifacts, ...]:
+def discover_generations(
+    *,
+    root: Path | None = None,
+    archive_dir: Path | None = None,
+) -> tuple[GenerationArtifacts, ...]:
     root = root or repo_root()
+    archives = archive_dir if archive_dir is not None else archive_root(root=root)
     found: dict[int, GenerationArtifacts] = {}
     traces = traces_root(root=root)
     if traces.is_dir():
@@ -58,15 +63,14 @@ def discover_generations(*, root: Path | None = None) -> tuple[GenerationArtifac
             generation = _gen_suffix(path.name)
             if generation is None or not path.is_dir():
                 continue
-            found[generation] = _artifacts(generation, root=root)
-    archives = archive_root(root=root)
+            found[generation] = _artifacts(generation, root=root, archive_dir=archives)
     if archives.is_dir():
         for path in sorted(archives.iterdir()):
             generation = _gen_suffix(path.name)
             if generation is None or not path.is_dir():
                 continue
             if generation not in found:
-                found[generation] = _artifacts(generation, root=root)
+                found[generation] = _artifacts(generation, root=root, archive_dir=archives)
     return tuple(found[key] for key in sorted(found))
 
 
@@ -142,16 +146,22 @@ def read_markdown(summary: ReviewSummary) -> str:
     return summary.review_md.read_text()
 
 
-def _artifacts(generation: int, *, root: Path) -> GenerationArtifacts:
+def _artifacts(
+    generation: int,
+    *,
+    root: Path,
+    archive_dir: Path | None = None,
+) -> GenerationArtifacts:
     traces_dir = traces_root(root=root) / f"gen{generation}"
-    archive_dir = archive_root(root=root) / f"gen{generation}"
+    archives = archive_dir if archive_dir is not None else archive_root(root=root)
+    archive_path = archives / f"gen{generation}"
     metrics = traces_dir / "metrics.json"
     return GenerationArtifacts(
         generation=generation,
         traces_dir=traces_dir,
         review=load_review(traces_dir) if traces_dir.exists() else None,
         metrics_path=metrics if metrics.is_file() else None,
-        archive_dir=archive_dir if archive_dir.is_dir() else None,
+        archive_dir=archive_path if archive_path.is_dir() else None,
     )
 
 

@@ -5,10 +5,11 @@ import pytest
 
 textual = pytest.importorskip("textual")
 
-from textual.widgets import OptionList
+from textual.widgets import OptionList, Select
 
-from ultron.cli.catalog import ActionId, all_actions
+from ultron.cli.catalog import ActionId, TmuxPlan, all_actions, plan
 from ultron.cli.console import ConsoleApp, View
+from ultron.train.family import FamilyName
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -43,6 +44,32 @@ def test_console_switches_to_jobs_and_results() -> None:
             await pilot.pause()
             assert app.view is View.CATALOG
             assert app.selected is ActionId.TESTS
+
+    asyncio.run(run())
+
+
+def test_console_family_selector_pins_launches() -> None:
+    app = ConsoleApp(root=ROOT, family="gemma")
+
+    async def run() -> None:
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause()
+            listing = app.query_one("#family", Select)
+            assert listing.value == "gemma"
+            assert app.family is FamilyName.GEMMA
+            app._select_action(ActionId.GENERATION)
+            built = plan(
+                ActionId.GENERATION,
+                app._field_values(),
+                root=ROOT,
+                family=app.family.value,
+            )
+            assert isinstance(built, TmuxPlan)
+            assert ("ULTRON_MODEL_FAMILY", "gemma") in built.env
+            listing.value = "qwen-8b"
+            await pilot.pause()
+            assert app.family is FamilyName.QWEN_8B
+            assert app.pack.base_model == "Qwen/Qwen3-8B"
 
     asyncio.run(run())
 

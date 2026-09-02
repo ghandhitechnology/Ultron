@@ -11,6 +11,7 @@ import yaml
 from ultron import __version__
 from ultron.cli.model import JobMeta
 from ultron.env.backend import IsolationBackend
+from ultron.train.family import FamilyError, FamilyName, FamilyPack, resolve
 
 
 class ActionId(str, Enum):
@@ -87,6 +88,7 @@ class ForegroundPlan:
     argv: tuple[str, ...]
     cwd: Path
     title: str
+    env: tuple[tuple[str, str], ...] = ()
     kind: Literal["foreground"] = "foreground"
 
 
@@ -233,6 +235,23 @@ def all_actions(*, root: Path | None = None) -> tuple[ActionSpec, ...]:
     )
 
 
+def family_options(*, root: Path | None = None) -> tuple[tuple[str, str], ...]:
+    root = root or repo_root()
+    rows: list[tuple[str, str]] = []
+    for name in FamilyName:
+        pack = resolve_pack(name.value, root=root)
+        rows.append((f"{pack.name.value}  {pack.base_model}", pack.name.value))
+    return tuple(rows)
+
+
+def resolve_pack(family: str | None = None, *, root: Path | None = None) -> FamilyPack:
+    root = root or repo_root()
+    try:
+        return resolve(family, repo_root=root, environ={})
+    except FamilyError as exc:
+        raise CatalogError(str(exc)) from exc
+
+
 def spec_for(action_id: ActionId, *, root: Path | None = None) -> ActionSpec:
     for spec in all_actions(root=root):
         if spec.id is action_id:
@@ -256,10 +275,18 @@ def parse_values(spec: ActionSpec, raw: Mapping[str, str]) -> dict[str, object]:
     return parsed
 
 
-def plan(action_id: ActionId, raw: Mapping[str, str], *, root: Path | None = None) -> LaunchPlan:
+def plan(
+    action_id: ActionId,
+    raw: Mapping[str, str],
+    *,
+    root: Path | None = None,
+    family: str | None = None,
+) -> LaunchPlan:
     root = root or repo_root()
     spec = spec_for(action_id, root=root)
     values = parse_values(spec, raw)
+    pack = resolve_pack(family, root=root)
+    family_env = _family_env(pack)
     match action_id:
         case ActionId.DEMO:
             return _plan_demo(values)
@@ -268,8 +295,13 @@ def plan(action_id: ActionId, raw: Mapping[str, str], *, root: Path | None = Non
             episodes = _int_value(values, "episodes")
             return TmuxPlan(
                 session=f"ultron-gen-{generation}",
-                argv=(_script(root, "run_generation.sh"), str(generation)),
-                env=(("ULTRON_EPISODES", str(episodes)),),
+                argv=(
+                    _script(root, "run_generation.sh"),
+                    "--family",
+                    pack.name.value,
+                    str(generation),
+                ),
+                env=family_env + (("ULTRON_EPISODES", str(episodes)),),
             )
         case ActionId.ROLLOUT:
             generation = _int_value(values, "generation")
@@ -283,6 +315,7 @@ def plan(action_id: ActionId, raw: Mapping[str, str], *, root: Path | None = Non
                     "--episodes",
                     str(episodes),
                 ),
+                env=family_env,
             )
         case ActionId.GRPO:
             role = str(values["role"])
@@ -291,11 +324,14 @@ def plan(action_id: ActionId, raw: Mapping[str, str], *, root: Path | None = Non
                 session=f"ultron-grpo-{role}-gen{generation}",
                 argv=(
                     _script(root, "train_grpo.sh"),
+                    "--family",
+                    pack.name.value,
                     "--role",
                     role,
                     "--generation",
                     str(generation),
                 ),
+                env=family_env,
             )
         case ActionId.DPO:
             role = str(values["role"])
@@ -306,26 +342,31 @@ def plan(action_id: ActionId, raw: Mapping[str, str], *, root: Path | None = Non
                 session=f"ultron-dpo-{role}-gen{generation}",
                 argv=(
                     _script(root, "train_dpo.sh"),
+                    "--family",
+                    pack.name.value,
                     "--role",
                     role,
                     "--generation",
                     str(generation),
                 ),
+                env=family_env,
             )
         case ActionId.SERVE_ATTACKER:
             generation = _int_value(values, "generation")
             return TmuxPlan(
                 session="ultron-vllm-attacker",
                 argv=(_script(root, "serve_vllm_attacker.sh"), str(generation)),
+                env=family_env,
             )
         case ActionId.SERVE_DEFENDER:
             generation = _int_value(values, "generation")
             return TmuxPlan(
                 session="ultron-vllm-defender",
                 argv=(_script(root, "serve_vllm_defender.sh"), str(generation)),
+                env=family_env,
             )
         case ActionId.REVIEW:
-            return _plan_review(values, root)
+            return _plan_review(values, root, pack)
         case ActionId.ARCHIVE:
             mode = str(values["mode"])
             generation = _int_value(values, "generation")
@@ -334,12 +375,13 @@ def plan(action_id: ActionId, raw: Mapping[str, str], *, root: Path | None = Non
                 argv.append("--all")
             else:
                 argv.extend(["--generation", str(generation)])
-            return ForegroundPlan(argv=tuple(argv), cwd=root, title="archive")
+            return ForegroundPlan(argv=tuple(argv), cwd=root, title="archive", env=family_env)
         case ActionId.ARCHIVE_LIST:
             return ForegroundPlan(
                 argv=(_python(), "-m", "ultron.train.archive", "--list"),
                 cwd=root,
                 title="archive list",
+                env=family_env,
             )
         case ActionId.EVAL:
             mode = str(values["mode"])
@@ -361,6 +403,7 @@ def plan(action_id: ActionId, raw: Mapping[str, str], *, root: Path | None = Non
                 ),
                 cwd=root,
                 title="pfsp",
+                env=family_env,
             )
         case ActionId.BANDPASS:
             generation = _int_value(values, "generation")
@@ -410,7 +453,7 @@ def _plan_demo(values: dict[str, object]) -> GymPlan:
     return GymPlan(meta=meta, delay_s=delay_s)
 
 
-def _plan_review(values: dict[str, object], root: Path) -> ForegroundPlan:
+def _plan_review(values: dict[str, object], root: Path, pack: FamilyPack) -> ForegroundPlan:
     generation = _int_value(values, "generation")
     phase = str(values["phase"])
     traces = values["traces"]
@@ -430,10 +473,10 @@ def _plan_review(values: dict[str, object], root: Path) -> ForegroundPlan:
     if values["include_eval"]:
         argv.extend(["--eval-dir", str(root / "data" / "eval")])
     if values["include_archive"]:
-        argv.extend(["--archive-dir", str(root / "data" / "archives")])
+        argv.extend(["--archive-dir", str(pack.archive_root)])
     if values["include_pfsp"]:
-        argv.extend(["--pfsp", str(root / "data" / "checkpoints" / "pfsp_pool.json")])
-    return ForegroundPlan(argv=tuple(argv), cwd=root, title="review")
+        argv.extend(["--pfsp", str(pack.pfsp_manifest)])
+    return ForegroundPlan(argv=tuple(argv), cwd=root, title="review", env=_family_env(pack))
 
 
 def _plan_tests(suite: str, root: Path) -> ForegroundPlan:
@@ -500,6 +543,10 @@ def _int(key: str, label: str, default: str, *, minimum_label: str | None = None
 
 def _choice(key: str, label: str, default: str, choices: tuple[str, ...]) -> FieldSpec:
     return FieldSpec(key, label, FieldKind.CHOICE, default, choices=choices)
+
+
+def _family_env(pack: FamilyPack) -> tuple[tuple[str, str], ...]:
+    return (("ULTRON_MODEL_FAMILY", pack.name.value),)
 
 
 def _int_value(values: dict[str, object], key: str) -> int:

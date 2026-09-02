@@ -1,0 +1,18 @@
+# shellcheck shell=bash
+
+ultron_load_family() {
+  local here root py
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  root="$(cd "${here}/.." && pwd)"
+  if [[ -x "${root}/.venv/bin/python" ]]; then
+    py="${root}/.venv/bin/python"
+  elif command -v python >/dev/null 2>&1; then
+    py="python"
+  else
+    py="python3"
+  fi
+  # declare -x inside a function is local. -g keeps the job pin in the caller.
+  local exported
+  exported="$(cd "${root}" && "${py}" -m ultron.train.family export)" || return 2
+  eval "$(printf '%s\n' "${exported}" | sed 's/^declare -x /declare -gx /')"
+}

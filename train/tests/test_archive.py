@@ -12,6 +12,7 @@ from ultron.train.archive import (
     find_all_adapter_roots,
     select_adapter,
 )
+from ultron.train.family import resolve
 from ultron.train.pfsp import load_pool
 from ultron.train.schema_v1 import Role
 
@@ -131,3 +132,10 @@ def test_archive_generation_requires_both_roles(tmp_path: Path) -> None:
             pfsp_manifest=tmp_path / "pfsp.json",
             pack=False,
         )
+
+
+def test_default_resolve_reads_repo_model_yaml() -> None:
+    pack = resolve(environ={})
+    assert pack.model_config.name == "model.yaml"
+    assert pack.model_config.parent.name == "configs"
+    assert pack.base_model == "Qwen/Qwen3.5-4B"

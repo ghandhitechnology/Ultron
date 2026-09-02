@@ -2,7 +2,7 @@
 
 같은 기반 모델로 공격자와 수비자를 따로 키우는 연구용 트레이너다. 이름은 GARPO다. 환경이 진짜 리눅스라는 점과, 누가 이겼는지를 모델이 아니라 호스트가 확인한다는 점이 핵심이다.
 
-기반은 `Qwen/Qwen3.5-4B`다. LoRA는 두 장이다. 둘 다 Pi로 `bash`/`read`/`write`/`edit`를 쓰고, 그 명령은 native KVM 위의 Ubuntu 18.04.6 게스트에서 실행된다. 공격자가 `uid 0`을 얻었는지는 게스트 보고만으로 끝내지 않는다. 호스트가 한 번 더 본다.
+기반은 `Qwen/Qwen3.5-4B`다. LoRA는 두 장이다. 둘 다 Pi로 `bash`/`read`/`write`/`edit`를 쓰고, 그 명령은 native KVM 위의 Ubuntu 18.04.6 게스트에서 실행된다. 공격자가 `uid 0`을 얻었는지는 게스트 보고만으로 끝내지 않는다. 호스트가 한 번 더 본다. 한 잡은 `qwen-4b`(기본), `qwen-8b`, `gemma` 중 하나만 고른다. `--family`나 `ULTRON_MODEL_FAMILY`로 고르고, 기본이 아니면 가중치는 `data/families/<이름>/`에 쌓인다.
 
 설치와 서버 부트스트랩은 [영문 README](README.md)와 [서버 가이드](docs/SERVER_GUIDE.md)를 보면 된다. 이 문서는 구조와 학습 쪽만 적는다.
 

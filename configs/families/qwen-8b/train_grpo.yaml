@@ -1,0 +1,34 @@
+algorithm:
+  adv_estimator: grpo
+  role_aware_baseline:
+    enabled: true
+    alpha: 0.95
+data:
+  train_batch_size: 64
+  max_prompt_length: 8192
+  max_response_length: 8192
+  filter_overlong_prompts: true
+  truncation: error
+actor_rollout_ref:
+  model:
+    path: Qwen/Qwen3-8B
+    lora_rank: 64
+    lora_alpha: 64
+    enable_gradient_checkpointing: true
+  actor:
+    use_kl_loss: true
+    kl_loss_coef: 0.01
+    kl_loss_type: low_var_kl
+    ppo_mini_batch_size: 32
+    ppo_epochs: 1
+    optim:
+      lr: 1.0e-6
+    use_dynamic_bsz: false
+  rollout:
+    name: vllm
+    n: 6
+    tensor_model_parallel_size: 1
+trainer:
+  n_gpus_per_node: 2
+  total_epochs: 1
+  project_name: ultron_garpo
