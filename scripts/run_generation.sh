@@ -15,6 +15,7 @@ if [[ "${GEN}" -ge 2 ]]; then
   "${ROOT}/scripts/train_dpo.sh" --role attacker --generation "${GEN}"
 fi
 
+python -m ultron.train.archive --generation "${GEN}"
 python -m ultron.train.pfsp --update-pool --generation "${GEN}"
 if [[ "${GEN}" -eq 2 ]]; then
   python -m ultron.eval.run_tier3 --mode light

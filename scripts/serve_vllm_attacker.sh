@@ -3,7 +3,8 @@ set -euo pipefail
 
 GEN="${GEN:-${1:-0}}"
 BASE="${ULTRON_BASE_MODEL:-Qwen/Qwen3.5-4B}"
-ADAPTER="${ULTRON_ATTACKER_ADAPTER:-data/checkpoints/gen${GEN}/attacker_lora}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ADAPTER="${ULTRON_ATTACKER_ADAPTER:-$("${ROOT}/scripts/resolve_adapter.sh" attacker "${GEN}")}"
 
 if [[ ! -d "${ADAPTER}" ]]; then
   echo "Attacker adapter not found: ${ADAPTER}" >&2

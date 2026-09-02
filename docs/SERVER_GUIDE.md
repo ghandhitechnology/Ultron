@@ -326,11 +326,19 @@ Pass when all result rows and aggregate metrics exist under `data/eval/` and the
 
 ## 10. Serve the two LoRAs with vLLM
 
-Install a vLLM version compatible with the pinned Qwen model in the project environment. Cache model weights on local NVMe. For generation 0, place adapters at:
+Install a vLLM version compatible with the pinned Qwen model in the project environment. Cache model weights on local NVMe. After a generation, archive the serveable LoRAs:
+
+```bash
+./scripts/archive_weights.sh
+# or one generation:
+./scripts/archive_weights.sh --generation 0
+```
+
+That copies every PEFT snapshot under the training `genN` dirs into `data/archives/genN/checkpoints/`, writes the last serveable adapters as `data/archives/final/`, and writes `data/archives/FINAL.sh`. `FINAL.sh` prints those paths; `FINAL.sh attacker` / `FINAL.sh defender` / `FINAL.sh checkpoints` select them. Serve scripts call `FINAL.sh` first. For a manual generation-0 drop before the first train:
 
 ```text
-data/checkpoints/gen0/attacker_lora
-data/checkpoints/gen0/defender_lora
+data/archives/final/attacker_lora
+data/archives/final/defender_lora
 ```
 
 Start each server in its own terminal:
@@ -401,9 +409,10 @@ The script runs these phases in order:
 2. Convert and train the attacker adapter with GRPO.
 3. Convert and train the defender adapter with GRPO.
 4. Run attacker prefix-branch DPO for generation 2 and later.
-5. Update the PFSP manifest.
-6. Trigger the generation-2 light or generation-4 full evaluation plan.
-7. Check ASR 0/1 kill-switch metrics when present.
+5. Archive every training checkpoint for the generation and refresh `data/archives/FINAL.sh`.
+6. Update the PFSP manifest.
+7. Trigger the generation-2 light or generation-4 full evaluation plan.
+8. Check ASR 0/1 kill-switch metrics when present.
 
 Use `ULTRON_EPISODES=10` only for plumbing checks. It is not a research run.
 
