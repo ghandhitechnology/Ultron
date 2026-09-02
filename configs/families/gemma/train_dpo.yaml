@@ -1,0 +1,25 @@
+model:
+  path: google/gemma-2-9b-it
+  lora_rank: 64
+  lora_alpha: 64
+  task_type: CAUSAL_LM
+data:
+  max_prompt_length: 4096
+  max_response_length: 4096
+  train_batch_size: 32
+training:
+  beta: 0.1
+  learning_rate: 5.0e-7
+  epochs: 1
+  gradient_checkpointing: true
+  role: attacker
+pairing:
+  start_generation: 2
+  branch_role: attacker
+  require_same_group: true
+  require_same_profile: true
+  require_same_opponent: true
+  require_shared_observation_hash: true
+trainer:
+  n_gpus_per_node: 2
+  project_name: ultron_garpo_dpo
