@@ -26,7 +26,7 @@ if [[ ! -d third_party/verl/verl ]]; then
   echo "Initialize third_party/verl before training." >&2
   exit 2
 fi
-ultron_maybe_tmux "ultron-grpo-${ROLE}-gen${GENERATION}"
+ultron_maybe_tmux "ultron-grpo-${ROLE}-gen${GENERATION}" "$@"
 
 INPUT="data/traces/gen${GENERATION}/${ROLE}.jsonl"
 OUTPUT="data/verl/gen${GENERATION}/${ROLE}.jsonl"

@@ -26,7 +26,7 @@ if [[ -z "${ULTRON_DPO_COMMAND:-}" ]]; then
   echo "Set ULTRON_DPO_COMMAND after pinning a veRL or TRL DPO launcher." >&2
   exit 2
 fi
-ultron_maybe_tmux "ultron-dpo-${ROLE}-gen${GENERATION}"
+ultron_maybe_tmux "ultron-dpo-${ROLE}-gen${GENERATION}" "$@"
 
 PAIRS="data/dpo/gen${GENERATION}/${ROLE}.jsonl"
 exec "${ULTRON_DPO_COMMAND}" \
