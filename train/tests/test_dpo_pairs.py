@@ -1,5 +1,6 @@
 import pytest
 
+from ultron.env.backend import IsolationBackend
 from ultron.train.dpo_pairs import extract_prefix_branch_pairs
 from ultron.train.schema_v1 import (
     SCHEMA_VERSION,
@@ -43,6 +44,7 @@ def trajectory(episode: str, reward: float, action: list[int], obs: str = "same"
             attacker_reward=reward,
             defender_reward=1.0 - reward,
         ),
+        isolation_backend=IsolationBackend.KVM,
     )
 
 

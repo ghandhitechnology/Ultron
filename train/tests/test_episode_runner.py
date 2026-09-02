@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from pathlib import Path
 
+from ultron.env.backend import IsolationBackend
 from ultron.train.adjudicator import ProbeResult
 from ultron.train.episode_runner import EpisodeConfig, EpisodeRunner
 
@@ -8,9 +8,9 @@ from ultron.train.episode_runner import EpisodeConfig, EpisodeRunner
 @dataclass(frozen=True)
 class FakeVm:
     vm_id: str
-    vsock_cid: int
+    isolation: IsolationBackend
     host_address: str
-    snapshot_path: Path
+    image_ref: str
 
 
 def test_run_restores_with_expected_sha() -> None:
@@ -38,9 +38,15 @@ def test_run_restores_with_expected_sha() -> None:
         attacker_ckpt="attacker-gen0",
         defender_ckpt="defender-gen0",
     )
-    vm = FakeVm(vm_id="vm-1", vsock_cid=3, host_address="10.0.0.2", snapshot_path=Path("/snap"))
+    vm = FakeVm(
+        vm_id="vm-1",
+        isolation=IsolationBackend.KVM,
+        host_address="10.0.0.2",
+        image_ref="img:golden",
+    )
 
     trajectories = runner.run(cfg, vm)
 
     assert calls == [("vm-1", "a" * 64)]
     assert len(trajectories) == 2
+    assert all(traj.isolation_backend is IsolationBackend.KVM for traj in trajectories)
