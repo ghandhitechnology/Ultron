@@ -20,6 +20,14 @@ Do not reserve GPUs for guests. Guests are CPU-only. Rollout uses two GPUs for t
 
 Before renting a long-lived node, confirm that the provider exposes native `/dev/kvm`. The first paid-hour gate is a throwaway Ubuntu 18.04 guest boot.
 
+### Cloud GPU VM / RunPod
+
+Train and serve need NVIDIA GPUs and Docker. They do not need `/dev/kvm`. Isolated rollouts use `scripts/bootstrap_cloud.sh` and `guest_backend: docker` in `configs/bm-gpu.yaml`. Host confirm reads the container's files through host `/proc`. It does not run `docker exec`.
+
+M0 on Docker is `./scripts/bootstrap_cloud.sh`, one container started from the golden image, and `confirm_root` returning false when the in-guest claim is uid 0. Bind vLLM to `127.0.0.1` so guests cannot reach the adapters.
+
+Ubuntu 18.04 systemd on a cgroup v2 host may fail service availability. If ssh or nginx do not start unprivileged, do not train on that host.
+
 ## 2. Install the host OS
 
 Install Ubuntu Server 22.04 or 24.04. Use local NVMe for `/var/lib/libvirt/images` if possible. Enable SSH using key authentication, apply current host security updates, and reboot:
@@ -522,7 +530,7 @@ Inspect the profile's `availability` list and service logs. The adjudicator must
 
 ### Guest claims uid 0 but host confirmation fails
 
-Treat the episode as non-winning. Check the guest-agent response, the independent `id -u` execution path, username mapping, and VM identity. Never accept guest-provided JSON alone as the root label.
+Treat the episode as non-winning. Check the host `/proc` confirm, username mapping, and guest identity. Never accept guest-provided JSON alone as the root label.
 
 ### vLLM runs out of memory
 

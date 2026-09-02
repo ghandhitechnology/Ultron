@@ -18,5 +18,6 @@ python -m vllm.entrypoints.openai.api_server \
   --lora-modules "defender-lora=${ADAPTER}" \
   --chat-template-kwargs '{"enable_thinking":false}' \
   --max-model-len 32768 \
+  --host 127.0.0.1 \
   --port 8002 \
   --gpu-memory-utilization 0.85
