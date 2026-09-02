@@ -1,0 +1,83 @@
+Screen {
+    background: #1e1e2e;
+    color: #cdd6f4;
+}
+
+#frame {
+    height: 100%;
+    border: heavy #45475a;
+    background: #1e1e2e;
+}
+
+#header {
+    height: 3;
+    padding: 0 1;
+    color: #cdd6f4;
+    background: #181825;
+    text-style: bold;
+    border-bottom: solid #45475a;
+}
+
+#arena {
+    height: 14;
+    padding: 0 1;
+}
+
+#attacker, #sandbox, #defender {
+    width: 1fr;
+    height: 1fr;
+    padding: 1 1;
+    border: solid #45475a;
+    background: #181825;
+}
+
+#attacker {
+    color: #f38ba8;
+}
+
+#sandbox {
+    color: #cba6f7;
+}
+
+#defender {
+    color: #a6e3a1;
+}
+
+#attacker:hover, #sandbox:hover, #defender:hover, #attacker:focus, #sandbox:focus, #defender:focus {
+    border: solid #89b4fa;
+}
+
+#detail {
+    height: 14;
+    padding: 1 2;
+    border: solid #89b4fa;
+    background: #181825;
+    color: #cdd6f4;
+}
+
+#log {
+    height: 1fr;
+    min-height: 6;
+    padding: 0 1;
+    border-top: solid #45475a;
+    background: #11111b;
+    color: #a6adc8;
+    scrollbar-background: #11111b;
+    scrollbar-color: #45475a;
+}
+
+#progress {
+    height: 5;
+    padding: 0 1;
+    color: #a6e3a1;
+    background: #181825;
+    border-top: solid #45475a;
+}
+
+#status {
+    height: 1;
+    padding: 0 1;
+    background: #313244;
+    color: #cdd6f4;
+    text-style: bold;
+}
