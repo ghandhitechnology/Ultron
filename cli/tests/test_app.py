@@ -23,6 +23,8 @@ def test_demo_job_paints_and_expands_sandbox(tmp_path) -> None:
     assert snap.phase is Phase.COMPLETE
     svg = shot.read_text()
     assert "LIVE GUEST GYM" in svg or "ultron" in svg.lower()
+    assert "exploiter" in svg.lower()
+    assert "vision" in svg.lower()
     expanded = tmp_path / "sim_sandbox.svg"
     assert expanded.is_file()
     assert "SANDBOX" in expanded.read_text() or "guest" in expanded.read_text().lower()

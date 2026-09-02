@@ -10,6 +10,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import RichLog, Static
 
 from ultron.cli.model import InvalidTransition, JobMeta, JobSnapshot, Phase, apply, initial_snapshot
+from ultron.cli.pixel import mascot_strip
 from ultron.cli.render import (
     attacker_pane,
     defender_pane,
@@ -63,10 +64,12 @@ class SimApp(App[None]):
         self.expanded: str | None = None
         self._log_index = 0
         self._done = False
+        self._pixel_tick = 0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="frame"):
             yield Static(id="header")
+            yield Static(id="sprites")
             with Horizontal(id="arena"):
                 yield HotPane("attacker", id="attacker")
                 yield HotPane("sandbox", id="sandbox")
@@ -79,6 +82,7 @@ class SimApp(App[None]):
     def on_mount(self) -> None:
         self.query_one("#detail", Static).display = False
         self.set_interval(0.05, self._drain)
+        self.set_interval(0.16, self._tick_pixels)
         self._paint()
 
     def action_expand(self, pane: str) -> None:
@@ -109,9 +113,14 @@ class SimApp(App[None]):
         if drained:
             self._paint()
 
+    def _tick_pixels(self) -> None:
+        self._pixel_tick += 1
+        self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
+
     def _paint(self) -> None:
         snap = self.snapshot
         self.query_one("#header", Static).update(header_line(snap))
+        self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
         self.query_one("#progress", Static).update(progress_block(snap))
         self.query_one("#status", Static).update(footer_line(snap, sim=self.sim))
         arena = self.query_one("#arena", Horizontal)

@@ -18,8 +18,16 @@ Screen {
     border-bottom: solid #45475a;
 }
 
+#sprites {
+    height: 9;
+    padding: 0 1;
+    color: #cdd6f4;
+    background: #11111b;
+    border-bottom: solid #45475a;
+}
+
 #arena {
-    height: 14;
+    height: 12;
     padding: 0 1;
 }
 
@@ -48,7 +56,7 @@ Screen {
 }
 
 #detail {
-    height: 14;
+    height: 12;
     padding: 1 2;
     border: solid #89b4fa;
     background: #181825;

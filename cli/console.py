@@ -36,6 +36,7 @@ from ultron.cli.jobs import (
     start_session,
     stop_session,
 )
+from ultron.cli.pixel import mascot_strip
 from ultron.cli.results import (
     ResultsError,
     discover_generations,
@@ -85,6 +86,7 @@ class ConsoleApp(App[GymPlan | None]):
         self._events: queue.Queue[object] = queue.Queue()
         self._log_cursor = 0
         self._done = False
+        self._pixel_tick = 0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="frame"):
@@ -99,6 +101,7 @@ class ConsoleApp(App[GymPlan | None]):
                     type_to_search=False,
                     id="family",
                 )
+            yield Static(id="sprites")
             with Horizontal(id="catalog"):
                 yield OptionList(id="actions")
                 with Vertical(id="detail"):
@@ -120,6 +123,7 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#job-table", DataTable).add_columns("session", "state", "pid", "command")
         self.query_one("#result-table", DataTable).add_columns("gen", "verdict", "episodes", "asr", "review")
         self.set_interval(0.2, self._tick)
+        self.set_interval(0.16, self._tick_pixels)
         self._show(View.CATALOG)
         if not self.query("#form Input"):
             self._select_action(self.selected)
@@ -335,6 +339,13 @@ class ConsoleApp(App[GymPlan | None]):
             self._drain_events()
             self._poll_run_logs()
 
+    def _tick_pixels(self) -> None:
+        self._pixel_tick += 1
+        self._paint_sprites()
+
+    def _paint_sprites(self) -> None:
+        self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
+
     def _drain_events(self) -> None:
         log = self.query_one("#run-log", RichLog)
         while True:
@@ -439,7 +450,9 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#jobs").display = view is View.JOBS
         self.query_one("#results").display = view is View.RESULTS
         self.query_one("#run").display = view is View.RUN
+        self.query_one("#sprites").display = view is View.CATALOG
         self.query_one("#header-title", Static).update(_header(view))
+        self._paint_sprites()
         self._set_status(_footer(view))
 
     def _set_status(self, text: str) -> None:

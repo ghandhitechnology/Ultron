@@ -25,6 +25,27 @@ def test_console_lists_every_catalog_action() -> None:
             expected = {spec.id.value for spec in all_actions(root=ROOT)}
             assert expected <= ids
             assert app.view is View.CATALOG
+            sprites = app.query_one("#sprites")
+            assert sprites.display is True
+            body = str(sprites.content)
+            assert "exploiter" in body
+            assert "vision" in body
+
+    asyncio.run(run())
+
+
+def test_console_pixel_idle_advances() -> None:
+    app = ConsoleApp(root=ROOT)
+
+    async def run() -> None:
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            start = app._pixel_tick
+            await pilot.pause(0.4)
+            assert app._pixel_tick > start
+            body = str(app.query_one("#sprites").content)
+            assert "exploiter" in body
+            assert "vision" in body
 
     asyncio.run(run())
 
