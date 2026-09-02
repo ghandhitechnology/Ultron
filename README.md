@@ -61,7 +61,7 @@ Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](d
 
 ## Model families
 
-A job pins one base-model family. Unset family is `qwen-4b` (`Qwen/Qwen3.5-4B`) and keeps the original `configs/` files plus `data/checkpoints` and `data/archives`. `qwen-8b` is `Qwen/Qwen3-8B`. `gemma` is `google/gemma-2-9b-it`. Those two live under `configs/families/<name>/` and write under `data/families/<name>/`.
+A job pins one base-model family. Unset family is `qwen-4b` (`Qwen/Qwen3.5-4B`) and keeps the original `configs/` files plus `data/checkpoints` and `data/archives`. `qwen-8b` is `Qwen/Qwen3-8B`. `gemma` is `google/gemma-4-12B-it`. Those two live under `configs/families/<name>/` and write under `data/families/<name>/`.
 
 ```bash
 ./scripts/run_generation.sh 0

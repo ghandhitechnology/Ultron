@@ -136,7 +136,7 @@ def test_qwen_packs_include_thinking_off_and_gemma_omits() -> None:
     assert gemma.vllm_chat_template_args() == ()
     assert gemma.export_environ()["ULTRON_VLLM_CHAT_TEMPLATE_KWARGS"] == ""
     assert gemma.chat_template_kwargs is None
-    assert gemma.max_model_len == 8192
+    assert gemma.max_model_len == 32768
 
 
 def test_qwen_8b_id_and_namespaced_roots() -> None:
@@ -149,7 +149,7 @@ def test_qwen_8b_id_and_namespaced_roots() -> None:
 
 def test_gemma_roots_are_namespaced() -> None:
     pack = resolve(FamilyName.GEMMA, repo_root=ROOT, environ={})
-    assert pack.base_model == "google/gemma-2-9b-it"
+    assert pack.base_model == "google/gemma-4-12B-it"
     assert pack.checkpoint_root == ROOT / "data" / "families" / "gemma" / "checkpoints"
     assert pack.archive_root == ROOT / "data" / "families" / "gemma" / "archives"
 
@@ -262,7 +262,7 @@ def test_lib_family_can_switch_and_rejects_unknown() -> None:
     assert result.returncode == 0, result.stderr
     lines = result.stdout.splitlines()
     assert lines[0] == "qwen-8b Qwen/Qwen3-8B"
-    assert lines[1] == "gemma google/gemma-2-9b-it"
+    assert lines[1] == "gemma google/gemma-4-12B-it"
     assert "unknown model family" in result.stderr
 
 

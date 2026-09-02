@@ -1,5 +1,5 @@
 family: gemma
-base_model: google/gemma-2-9b-it
+base_model: google/gemma-4-12B-it
 thinking:
   enable_thinking: false
 lora:
@@ -13,6 +13,6 @@ adapters:
 serving:
   attacker_url: http://127.0.0.1:8001/v1
   defender_url: http://127.0.0.1:8002/v1
-  max_model_len: 8192
+  max_model_len: 32768
   gpu_memory_utilization: 0.85
   chat_template_kwargs: null

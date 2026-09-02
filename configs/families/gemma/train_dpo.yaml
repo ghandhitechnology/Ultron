@@ -1,11 +1,11 @@
 model:
-  path: google/gemma-2-9b-it
+  path: google/gemma-4-12B-it
   lora_rank: 64
   lora_alpha: 64
   task_type: CAUSAL_LM
 data:
-  max_prompt_length: 4096
-  max_response_length: 4096
+  max_prompt_length: 8192
+  max_response_length: 8192
   train_batch_size: 32
 training:
   beta: 0.1
