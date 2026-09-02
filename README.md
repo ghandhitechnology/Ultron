@@ -6,6 +6,22 @@ Ultron is a research trainer for environment-grounded asymmetric self-play. Sepa
 
 This repository is research-ready scaffolding. Pure Python contracts, reward logic, PFSP sampling, DPO pair extraction, configuration, launch scripts, and tests run without GPUs or guests. vLLM serving and GRPO or DPO training run on any NVIDIA host. Isolated rollouts need Docker (`scripts/bootstrap_cloud.sh`) or native KVM. See [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
 
+## Server requirements
+
+Python unit tests, reward logic, and `ultron-sim demo` need no GPU. Isolated rollouts, vLLM, GRPO, and DPO do.
+
+Supported bases are Qwen 4B, Qwen 8B, and Gemma 12B. The checked-in default is `Qwen/Qwen3.5-4B`. Point `configs/model.yaml`, `ULTRON_BASE_MODEL`, `configs/train_grpo.yaml`, and `configs/train_dpo.yaml` at `Qwen/Qwen3-8B` or `google/gemma-3-12b-it` only on a host that meets that row. Qwen 27B, 35B, and larger Qwen MoE checkpoints are not supported.
+
+Figures assume two vLLM processes (attacker and defender), BF16 weights, `max_model_len` 32768, LoRA rank 64, 16 CPU-only guests at 2 vCPU / 4 GiB each, and GRPO or DPO after both servers stop. Guests never take a GPU. Pin one GPU per role. Do not overlap vLLM and FSDP.
+
+| Variant | CPU | Host RAM | Recommended GPU setup |
+| --- | --- | --- | --- |
+| `Qwen/Qwen3.5-4B` (locked) | 32 physical cores; 64 safer | 128 GB | 2× A100 80 GB, or 2× H100 80 GB. Attacker on GPU 0, defender on GPU 1 (`ULTRON_ATTACKER_GPU` / `ULTRON_DEFENDER_GPU`). |
+| `Qwen/Qwen3-8B` | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB or 2× A100 80 GB with the same one-GPU-per-role pin. 2× L40S 48 GB only if you cut guest concurrency. |
+| `google/gemma-3-12b-it` | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB preferred; 2× A100 80 GB is the fallback. Skip 24 GB cards. 48 GB cards need a smaller guest pool. |
+
+Every row also needs x86-64, Ubuntu 22.04 or 24.04, an NVIDIA datacenter driver, and at least 1 TB local NVMe for the base image, overlays, Hugging Face cache, traces, and checkpoints. Docker guests use `scripts/bootstrap_cloud.sh` and do not need `/dev/kvm`. Native KVM guests need `/dev/kvm` and the 32-core floor if you keep 16 VMs.
+
 ## Quick start
 
 Use Python 3.10 or newer.
