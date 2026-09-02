@@ -349,7 +349,7 @@ data/archives/final/attacker_lora
 data/archives/final/defender_lora
 ```
 
-Start each server in its own terminal:
+Start each server in its own tmux session. The launchers wrap themselves so the process survives SSH disconnects. On a TTY they attach; detach with `Ctrl-b d`. Without a TTY they start detached:
 
 ```bash
 source .venv/bin/activate
@@ -361,6 +361,12 @@ source .venv/bin/activate
 GEN=0 ULTRON_DEFENDER_GPU=1 ./scripts/serve_vllm_defender.sh
 ```
 
+```bash
+./scripts/tmux_job.sh list
+./scripts/tmux_job.sh attach ultron-vllm-attacker
+./scripts/tmux_job.sh attach ultron-vllm-defender
+```
+
 Wait for both ports:
 
 ```bash
@@ -370,10 +376,11 @@ curl -fsS http://127.0.0.1:8002/v1/models | jq
 
 Send one structured canary request to each endpoint and verify the selected model IDs are `attacker-lora` and `defender-lora`. The launchers pass `enable_thinking=false` through chat-template kwargs. Confirm your pinned vLLM revision honors that argument before M5.
 
-Stop both vLLM processes before training:
+Stop both vLLM sessions before training:
 
 ```bash
-pkill -f 'vllm.entrypoints.openai.api_server'
+./scripts/tmux_job.sh stop ultron-vllm-attacker
+./scripts/tmux_job.sh stop ultron-vllm-defender
 nvidia-smi
 ```
 
@@ -405,10 +412,11 @@ The DPO command must accept:
 --config PATH --pairs PATH --output PATH
 ```
 
-Run one generation:
+Run one generation. The script starts session `ultron-gen-0` and keeps running if the SSH session dies:
 
 ```bash
 ./scripts/run_generation.sh 0
+./scripts/tmux_job.sh attach ultron-gen-0
 ```
 
 The script runs these phases in order:
@@ -462,9 +470,11 @@ The stock Docker InterCode runner is an integration stub. Keep Docker outside th
 
 ## 13. Operational checks during a run
 
-Watch CPU, memory, guest state, disks, and GPUs:
+Watch CPU, memory, guest state, disks, GPUs, and job sessions:
 
 ```bash
+./scripts/tmux_job.sh list
+./scripts/tmux_job.sh logs ultron-gen-0
 watch -n 2 nvidia-smi
 virsh -c qemu:///system list --all
 ps -eo pid,psr,pcpu,pmem,cmd | egrep 'qemu|vllm|verl'

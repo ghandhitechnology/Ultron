@@ -9,7 +9,7 @@ if [[ "${1:-}" == "--install-host-packages" ]]; then
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y \
     cpu-checker qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils \
-    cloud-image-utils python3-venv git jq
+    cloud-image-utils python3-venv git jq tmux
   systemctl enable --now libvirtd
   echo "Install the recommended NVIDIA datacenter driver, reboot, then rerun without flags."
   exit 0
@@ -36,6 +36,9 @@ fi
 if command -v virsh >/dev/null && ! virsh -c qemu:///system list >/dev/null; then
   echo "FAILED: libvirt system connection" >&2
   failures=$((failures + 1))
+fi
+if ! command -v tmux >/dev/null; then
+  echo "WARNING: tmux is missing; generation and vLLM jobs will die on SSH disconnect." >&2
 fi
 
 if [[ "${failures}" -ne 0 ]]; then

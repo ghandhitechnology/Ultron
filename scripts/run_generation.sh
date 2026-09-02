@@ -2,8 +2,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib_tmux.sh
+source "${ROOT}/scripts/lib_tmux.sh"
 cd "${ROOT}"
 GEN="${1:-0}"
+ultron_maybe_tmux "ultron-gen-${GEN}"
 EPISODES="${ULTRON_EPISODES:-2048}"
 
 echo "=== Ultron generation ${GEN} ==="
