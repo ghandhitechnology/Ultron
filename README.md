@@ -4,6 +4,12 @@
 
 Ultron is a research trainer for environment-grounded asymmetric self-play. Separate attacker and defender LoRAs act through Pi in isolated Ubuntu 18.04 guests. Guests are Docker or KVM, selected by `guest_backend`. GRPO, DPO, and vLLM run on cloud GPU VMs. A guest probe plus an independent host-side check adjudicates uid 0. Availability probes prevent the defender from scoring by breaking required services.
 
+<p align="center">
+  <img src="docs/screenshots/demo_gym.png" alt="Live guest gym after a stub episode, with attacker, sandbox, and defender panes, a process log, and episode progress bars" width="920" />
+</p>
+
+`ultron-sim demo` is the live guest gym. The header keeps generation, episode, profile, and ETA in view. The three panes are the attacker LoRA, the guest, and the defender LoRA. Watch the log if you want the turn clock. The bars track episode and turn progress. This shot is SIM MODE: a real `EpisodeRunner` running against stub guests, so you can learn the layout with no GPUs and no VMs.
+
 This repository is research-ready scaffolding. Pure Python contracts, reward logic, PFSP sampling, DPO pair extraction, configuration, launch scripts, and tests run without GPUs or guests. vLLM serving and GRPO or DPO training run on any NVIDIA host. Isolated rollouts need Docker (`scripts/bootstrap_cloud.sh`) or native KVM. See [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
 
 ## Server requirements
@@ -38,6 +44,14 @@ Or with [uv](https://docs.astral.sh/uv/) and the committed lockfile:
 ```bash
 uv sync --extra dev
 uv run pytest train/tests/ -q
+```
+
+The gym and the experiment console need the TUI extra:
+
+```bash
+python -m pip install -e '.[tui]'
+ultron-sim demo
+ultron-sim
 ```
 
 Initialize upstream code when you are on the training server:
@@ -79,6 +93,24 @@ Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](d
 
 A job pins one base-model family. Unset family is `qwen-4b` (`Qwen/Qwen3.5-4B`) and keeps the original `configs/` files plus `data/checkpoints` and `data/archives`. `qwen-8b` is `Qwen/Qwen3-8B`. `gemma` is `google/gemma-4-12B-it`. Those two live under `configs/families/<name>/` and write under `data/families/<name>/`.
 
+<p align="center">
+  <img src="docs/screenshots/console_family_gemma.png" alt="Experiment console with the Gemma family pin in the header" width="900" />
+</p>
+
+The pin in the header is the same selector you set with `--family` or `ULTRON_MODEL_FAMILY`. Here it reads `gemma`.
+
+<p align="center">
+  <img src="docs/screenshots/console_family_dropdown.png" alt="Model family dropdown listing Gemma and the two Qwen packs" width="900" />
+</p>
+
+Press `m` to jump to the selector. You get three names and only three: `qwen-4b`, `qwen-8b`, and `gemma`.
+
+<p align="center">
+  <img src="docs/screenshots/console_family_qwen8b.png" alt="Experiment console with the Qwen 8B family pin" width="900" />
+</p>
+
+Pick `qwen-8b` and everything writes under `data/families/qwen-8b/`. The default `qwen-4b` pack stays where it is, on `data/checkpoints` and `data/archives`.
+
 ```bash
 ./scripts/run_generation.sh 0
 ./scripts/run_generation.sh --family qwen-8b 0
@@ -96,9 +128,33 @@ python -m pip install -e '.[tui]'
 ultron-sim
 ```
 
-Keys: `enter` runs the selected action, `m` focuses the model-family selector, `j` lists jobs, `r` lists generation results, `t` jumps to tests, `s` stops a job, `q` quits. The header selector pins `qwen-4b`, `qwen-8b`, or `gemma` for every launch. `ultron-sim --family gemma` sets the same pin before the console opens.
+<p align="center">
+  <img src="docs/screenshots/console_catalog.png" alt="Experiment console catalog with Full generation selected, generation 0 and 2048 episodes" width="900" />
+</p>
 
-`ultron-sim demo` is the live guest-gym view: attacker and defender turns, sandbox identity, a scrolling process log, progress, and ETA. Click a pane (or press `a` / `s` / `d` / `t`) to expand detail. The demo drives a real `EpisodeRunner` with stub guests so you can watch the layout without GPUs or VMs. Production attach wraps the same injected `restore` / `run_turn` / `final_probe` callables and leaves `EpisodeRunner.run` unchanged. The console can open that gym as the "Live guest gym" action.
+The list on the left is the catalog, grouped into gym, pipeline, train, serve, results, and verify. Pick an action and the right pane shows it with its fields. Full generation chains the whole loop: rollout, review, GRPO, an optional DPO step, archive, PFSP, and eval.
+
+Keys: `enter` runs the selected action, `m` focuses the model-family selector, `j` lists jobs, `r` lists generation results, `t` jumps to tests, `s` stops a job, `q` quits. `ultron-sim --family gemma` sets the same pin before the console opens.
+
+<p align="center">
+  <img src="docs/screenshots/console_jobs.png" alt="Experiment console tmux jobs view with session, state, pid, and command columns" width="900" />
+</p>
+
+`j` opens the tmux job table. From there, `enter` opens logs, `s` stops the session you have selected, and `g` refreshes the list. Long jobs still live in the named sessions that `scripts/tmux_job.sh` starts, not in the console.
+
+<p align="center">
+  <img src="docs/screenshots/console_results_with_gen.png" alt="Generation results table showing gen 3, usable verdict, 12 episodes, and ASR 0.420" width="900" />
+</p>
+
+`r` lists the generations it finds under `data/traces` and `data/archives`. Hit `enter` on a row and the console pulls in that generation's `review.md`. Verdict, episode count, and ASR all come straight from that file. This is a reader, not a replacement for `train/review.py`.
+
+<p align="center">
+  <img src="docs/screenshots/console_run_archive_list.png" alt="Foreground run view showing archive list JSON and exit 0" width="900" />
+</p>
+
+Foreground actions like list archives, tests, and the kill-switch check stream right into this run view. Anything launched through tmux leaves the console and keeps running in its own session.
+
+`ultron-sim demo` is the live guest-gym view. It shows attacker and defender turns, the sandbox identity, a scrolling process log, progress, and an ETA. Click a pane, or press `a` / `s` / `d` / `t`, to expand its detail. The demo drives a real `EpisodeRunner` with stub guests, so you can check the layout without GPUs or VMs. Production attach wraps the same injected `restore` / `run_turn` / `final_probe` callables and leaves `EpisodeRunner.run` untouched. From the console, the "Live guest gym" action opens the same view.
 
 ## Safety boundary
 
