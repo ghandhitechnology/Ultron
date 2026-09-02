@@ -43,6 +43,21 @@ Do not place guest images, traces, model weights, credentials, or checkpoints in
 - `configs/` records the locked model, host, generation, training, and evaluation parameters.
 - `scripts/` contains host checks, vLLM launchers, rollout launch, and generation training entry points.
 
+## Long-running jobs
+
+Generation, rollout, GRPO, DPO, and vLLM launchers start in named tmux sessions so they keep running after SSH disconnects, hangup, or a closed terminal. Nested calls from `run_generation.sh` stay in the parent session.
+
+```bash
+./scripts/run_generation.sh 0
+./scripts/serve_vllm_attacker.sh
+./scripts/tmux_job.sh list
+./scripts/tmux_job.sh attach ultron-gen-0
+./scripts/tmux_job.sh logs ultron-gen-0
+./scripts/tmux_job.sh stop ultron-vllm-attacker
+```
+
+Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
+
 ## Safety boundary
 
 Ultron targets disposable guests on a default-deny isolated libvirt network. The repository contains misconfiguration identifiers, not exploit payloads, CVE procedures, or host escape material. Run only on systems you own or have explicit permission to test.

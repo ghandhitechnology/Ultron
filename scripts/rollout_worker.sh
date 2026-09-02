@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib_tmux.sh
+source "${ROOT}/scripts/lib_tmux.sh"
+
 GENERATION=""
 EPISODES=""
 while [[ "$#" -gt 0 ]]; do
@@ -19,6 +23,7 @@ if [[ -z "${ULTRON_ROLLOUT_COMMAND:-}" ]]; then
   echo "Set ULTRON_ROLLOUT_COMMAND to the M3-verified Pi/guest rollout launcher." >&2
   exit 2
 fi
+ultron_maybe_tmux "ultron-rollout-gen${GENERATION}"
 
 mkdir -p "data/traces/gen${GENERATION}"
 exec "${ULTRON_ROLLOUT_COMMAND}" \

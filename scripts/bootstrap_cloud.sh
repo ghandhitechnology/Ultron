@@ -26,6 +26,10 @@ else
   fi
 fi
 
+if ! command -v tmux >/dev/null; then
+  echo "WARNING: tmux is missing; generation and vLLM jobs will die on SSH disconnect." >&2
+fi
+
 if [[ "${failures}" -ne 0 ]]; then
   echo "Cloud host gates failed with ${failures} error(s)." >&2
   exit 1

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib_tmux.sh
+source "${ROOT}/scripts/lib_tmux.sh"
+
 ROLE=""
 GENERATION=""
 while [[ "$#" -gt 0 ]]; do
@@ -22,6 +26,7 @@ if [[ ! -d third_party/verl/verl ]]; then
   echo "Initialize third_party/verl before training." >&2
   exit 2
 fi
+ultron_maybe_tmux "ultron-grpo-${ROLE}-gen${GENERATION}"
 
 INPUT="data/traces/gen${GENERATION}/${ROLE}.jsonl"
 OUTPUT="data/verl/gen${GENERATION}/${ROLE}.jsonl"
