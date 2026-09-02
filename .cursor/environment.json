@@ -1,0 +1,5 @@
+{
+  "name": "Ultron",
+  "user": "ubuntu",
+  "install": "./.cursor/install.sh"
+}
