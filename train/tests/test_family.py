@@ -306,5 +306,4 @@ def test_shipped_packs_fit_context_window() -> None:
 def test_pack_is_frozen() -> None:
     pack = resolve(environ={})
     assert isinstance(pack, FamilyPack)
-    with pytest.raises(Exception):
-        pack.base_model = "nope"  # type: ignore[misc]
+    assert pack.__dataclass_params__.frozen is True

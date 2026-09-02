@@ -1,7 +1,6 @@
 """ultron.train.family — job-wide base-model family pin.
 
 Public surface: FamilyName, resolve(), FamilyPack, the three errors.
-Hugging Face ids live only in the pack YAMLs. This module stores paths.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any
 
 import yaml
 
@@ -44,19 +43,6 @@ class FamilyOverrideConflictError(FamilyError):
 
 @dataclass(frozen=True)
 class FamilyPack:
-    """Everything one job needs after a family name is chosen.
-
-    Invariants:
-    - name is a FamilyName (already parsed).
-    - base_model equals model.yaml base_model, train_grpo
-      actor_rollout_ref.model.path, and train_dpo model.path.
-    - model_config / grpo / dpo paths exist and share one key tree
-      with the other shipped packs (enforced by tests, not by this type).
-    - chat_template_kwargs is None ⇒ serve omits the vLLM flag.
-    - For QWEN_4B, artifact roots are the historical paths. Other
-      families are namespaced so two families can coexist on one tree.
-    """
-
     name: FamilyName
     base_model: str
     model_config: Path
@@ -101,13 +87,13 @@ class FamilyPack:
 
 @dataclass(frozen=True)
 class _PackLayout:
-    """Private. Paths relative to repo_root. No Hugging Face ids."""
-
     model_config: Path
     grpo_dir: Path
     grpo_name: str
     dpo_config: Path
-    artifact_namespace: str | None  # None ⇒ historical default roots
+    checkpoint_root: Path
+    archive_root: Path
+    pfsp_manifest: Path
 
 
 def parse_family_name(raw: str) -> FamilyName:
@@ -183,7 +169,6 @@ def resolve(
         raise InconsistentFamilyPackError(
             f"{model_path} serving.chat_template_kwargs must be a mapping or null"
         )
-    checkpoint_root, archive_root, pfsp_manifest = _artifact_roots(root, layout.artifact_namespace)
     return FamilyPack(
         name=selected,
         base_model=model_id,
@@ -191,9 +176,9 @@ def resolve(
         grpo_config_dir=(root / layout.grpo_dir).resolve(),
         grpo_config_name=layout.grpo_name,
         dpo_config=dpo_path,
-        checkpoint_root=checkpoint_root,
-        archive_root=archive_root,
-        pfsp_manifest=pfsp_manifest,
+        checkpoint_root=root / layout.checkpoint_root,
+        archive_root=root / layout.archive_root,
+        pfsp_manifest=root / layout.pfsp_manifest,
         max_model_len=max_model_len,
         gpu_memory_utilization=gpu_memory_utilization,
         chat_template_kwargs=chat_kwargs,
@@ -212,50 +197,44 @@ def _select_name(name: FamilyName | str | None, environ: Mapping[str, str]) -> F
 
 
 def _layout(name: FamilyName) -> _PackLayout:
-    """Closed path table. Adding a FamilyName without a case is a type error."""
     match name:
         case FamilyName.QWEN_4B:
+            checkpoints = Path("data/checkpoints")
+            archives = Path("data/archives")
             return _PackLayout(
                 model_config=Path("configs/model.yaml"),
                 grpo_dir=Path("configs"),
                 grpo_name="train_grpo",
                 dpo_config=Path("configs/train_dpo.yaml"),
-                artifact_namespace=None,
+                checkpoint_root=checkpoints,
+                archive_root=archives,
+                pfsp_manifest=checkpoints / "pfsp_pool.json",
             )
         case FamilyName.QWEN_8B:
+            checkpoints = Path("data/families/qwen-8b/checkpoints")
+            archives = Path("data/families/qwen-8b/archives")
             return _PackLayout(
                 model_config=Path("configs/families/qwen-8b/model.yaml"),
                 grpo_dir=Path("configs/families/qwen-8b"),
                 grpo_name="train_grpo",
                 dpo_config=Path("configs/families/qwen-8b/train_dpo.yaml"),
-                artifact_namespace="qwen-8b",
+                checkpoint_root=checkpoints,
+                archive_root=archives,
+                pfsp_manifest=checkpoints / "pfsp_pool.json",
             )
         case FamilyName.GEMMA:
+            checkpoints = Path("data/families/gemma/checkpoints")
+            archives = Path("data/families/gemma/archives")
             return _PackLayout(
                 model_config=Path("configs/families/gemma/model.yaml"),
                 grpo_dir=Path("configs/families/gemma"),
                 grpo_name="train_grpo",
                 dpo_config=Path("configs/families/gemma/train_dpo.yaml"),
-                artifact_namespace="gemma",
+                checkpoint_root=checkpoints,
+                archive_root=archives,
+                pfsp_manifest=checkpoints / "pfsp_pool.json",
             )
-    _unreachable(name)
-
-
-def _unreachable(name: FamilyName) -> NoReturn:
     raise AssertionError(f"unhandled family {name!r}")
-
-
-def _artifact_roots(repo_root: Path, namespace: str | None) -> tuple[Path, Path, Path]:
-    # Default stays data/{checkpoints,archives}. Other families are isolated so
-    # they cannot clobber 4B adapters or the historical PFSP file.
-    if namespace is None:
-        checkpoint_root = repo_root / "data" / "checkpoints"
-        archive_root = repo_root / "data" / "archives"
-        return checkpoint_root, archive_root, checkpoint_root / "pfsp_pool.json"
-    family_root = repo_root / "data" / "families" / namespace
-    checkpoint_root = family_root / "checkpoints"
-    archive_root = family_root / "archives"
-    return checkpoint_root, archive_root, checkpoint_root / "pfsp_pool.json"
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -268,7 +247,6 @@ def _read_yaml(path: Path) -> dict[str, Any]:
 
 
 def _hf_ids(model: dict[str, Any], grpo: dict[str, Any], dpo: dict[str, Any]) -> tuple[str, str, str]:
-    """Pull the three pin sites. Missing key → InconsistentFamilyPackError."""
     try:
         model_id = model["base_model"]
         grpo_id = grpo["actor_rollout_ref"]["model"]["path"]

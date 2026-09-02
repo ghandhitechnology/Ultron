@@ -1,6 +1,4 @@
 # shellcheck shell=bash
-# Source from a launch script, then call: ultron_load_family
-# Optional --family is already exported as ULTRON_MODEL_FAMILY.
 
 ultron_load_family() {
   local here root py
