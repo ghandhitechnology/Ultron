@@ -42,6 +42,7 @@ Do not place guest images, traces, model weights, credentials, or checkpoints in
 - `eval/` defines tier-3 plans, procedural selection, InterCode integration points, and the ReAct baseline interface.
 - `configs/` records the locked model, host, generation, training, and evaluation parameters.
 - `scripts/` contains host checks, vLLM launchers, rollout launch, and generation training entry points.
+- `cli/` is the live guest-gym dashboard (`ultron-sim demo`). It wraps `EpisodeRunner` callbacks and does not replace `train/review.py`.
 
 ## Long-running jobs
 
@@ -57,6 +58,17 @@ Generation, rollout, GRPO, DPO, and vLLM launchers start in named tmux sessions 
 ```
 
 Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
+
+## Live simulation dashboard
+
+`ultron-sim` is a full-screen TUI for one guest-gym job: attacker and defender turns, sandbox identity, a scrolling process log, progress, and ETA. It runs inside tmux. Click a pane (or press `a` / `s` / `d` / `t`) to expand detail.
+
+```bash
+python -m pip install -e '.[tui]'
+ultron-sim demo
+```
+
+The demo drives a real `EpisodeRunner` with stub guests so you can watch the layout without GPUs or VMs. Production attach wraps the same injected `restore` / `run_turn` / `final_probe` callables and leaves `EpisodeRunner.run` unchanged.
 
 ## Safety boundary
 
