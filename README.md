@@ -17,6 +17,12 @@ python -m pip install -e '.[dev]'
 python -m pytest train/tests/ -q
 ```
 
+On a Docker host, run the baby guest before a full cloud M0:
+
+```bash
+./scripts/baby_cloud_smoke.sh
+```
+
 Or with [uv](https://docs.astral.sh/uv/) and the committed lockfile:
 
 ```bash

@@ -28,3 +28,6 @@ packages = [
 [tool.pytest.ini_options]
 testpaths = ["train/tests", "env/tests"]
 addopts = "-ra"
+markers = [
+  "docker: live checks that need a docker daemon",
+]
