@@ -3,8 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import random
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .schema_v1 import Role
 
@@ -19,6 +20,23 @@ class PoolEntry:
     def __post_init__(self) -> None:
         if not 0.0 <= self.win_rate_vs_live <= 1.0:
             raise ValueError("win_rate_vs_live must be in [0, 1]")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "checkpoint_id": self.checkpoint_id,
+            "path": self.path,
+            "role": self.role.value,
+            "win_rate_vs_live": self.win_rate_vs_live,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PoolEntry":
+        return cls(
+            checkpoint_id=str(data["checkpoint_id"]),
+            path=str(data["path"]),
+            role=Role(data["role"]),
+            win_rate_vs_live=float(data["win_rate_vs_live"]),
+        )
 
 
 def pfsp_weight(entry: PoolEntry) -> float:
@@ -58,6 +76,22 @@ def update_pool(entries: list[PoolEntry], new_entry: PoolEntry, limit: int = 8) 
     return sorted(updated, key=pfsp_weight, reverse=True)[:limit]
 
 
+def load_pool(path: Path) -> list[PoolEntry]:
+    if not path.is_file():
+        return []
+    payload = json.loads(path.read_text())
+    return [PoolEntry.from_dict(entry) for entry in payload.get("entries", [])]
+
+
+def save_pool(path: Path, generation: int, entries: list[PoolEntry]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "generation": generation,
+        "entries": [entry.to_dict() for entry in entries],
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n")
+
+
 def _main() -> None:
     parser = argparse.ArgumentParser(description="Update the local PFSP checkpoint manifest.")
     parser.add_argument("--update-pool", action="store_true")
@@ -66,12 +100,7 @@ def _main() -> None:
     args = parser.parse_args()
     if not args.update_pool:
         parser.error("--update-pool is required")
-    args.manifest.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"generation": args.generation, "entries": []}
-    if args.manifest.exists():
-        payload = json.loads(args.manifest.read_text())
-        payload["generation"] = args.generation
-    args.manifest.write_text(json.dumps(payload, indent=2) + "\n")
+    save_pool(args.manifest, args.generation, load_pool(args.manifest))
 
 
 if __name__ == "__main__":
