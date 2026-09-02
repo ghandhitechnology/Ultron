@@ -2,7 +2,7 @@
 
 같은 기반 모델로 공격자와 수비자를 따로 키우는 연구용 트레이너다. 이름은 GARPO다. 환경이 진짜 리눅스라는 점과, 누가 이겼는지를 모델이 아니라 호스트가 확인한다는 점이 핵심이다.
 
-기반은 `Qwen/Qwen3.5-4B`다. LoRA는 두 장이다. 둘 다 Pi로 `bash`/`read`/`write`/`edit`를 쓰고, 그 명령은 native KVM 위의 Ubuntu 18.04.6 게스트에서 실행된다. 공격자가 `uid 0`을 얻었는지는 게스트 보고만으로 끝내지 않는다. 호스트가 한 번 더 본다. 한 잡은 `qwen-4b`(기본), `qwen-8b`, `gemma` 중 하나만 고른다. `--family`나 `ULTRON_MODEL_FAMILY`로 고르고, 기본이 아니면 가중치는 `data/families/<이름>/`에 쌓인다.
+기반은 `Qwen/Qwen3.5-4B`가 기본이다. LoRA는 두 장이다. 둘 다 Pi로 `bash`/`read`/`write`/`edit`를 쓰고, 그 명령은 격리된 Ubuntu 18.04.6 게스트(Docker 또는 native KVM, `guest_backend`로 선택)에서 실행된다. 공격자가 `uid 0`을 얻었는지는 게스트 보고만으로 끝내지 않는다. 호스트가 독립적인 `/proc` 검증이나 vsock RPC로 한 번 더 본다. 한 잡은 `qwen-4b`(기본), `qwen-8b`, `gemma` 중 하나만 고른다. `--family`나 `ULTRON_MODEL_FAMILY`로 고르고, 기본이 아니면 가중치는 `data/families/<이름>/`에 쌓인다.
 
 설치와 서버 부트스트랩은 [영문 README](README.md)와 [서버 가이드](docs/SERVER_GUIDE.md)를 보면 된다. 이 문서는 구조와 학습 쪽만 적는다.
 
@@ -12,8 +12,8 @@
 flowchart LR
   attacker["공격자 LoRA"] --> piHarness["Pi 하네스"]
   defender["수비자 LoRA"] --> piHarness
-  piHarness --> kvmGuest["Ubuntu 18.04.6 KVM 게스트"]
-  kvmGuest --> oracle["uid 0 및 가용성 판정"]
+  piHarness --> guest["격리 게스트 (Docker 또는 KVM)"]
+  guest --> oracle["uid 0 및 가용성 판정"]
   oracle --> trajectories["trajectory schema v1"]
   trajectories --> trainer["GRPO 및 DPO"]
   trainer --> attacker
@@ -30,7 +30,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  subgraph hostBm["Bare-metal host"]
+  subgraph hostBm["Host machine (Cloud GPU VM or Bare-metal)"]
     orchestrator["Episode orchestrator"]
     opponentPool["PFSP-8 opponent pool"]
     subgraph rolloutServing["Rollout serving"]
@@ -47,7 +47,7 @@ flowchart TB
     dpoTrainer["Prefix-branch DPO"]
   end
 
-  subgraph guestPool["Native KVM guest pool"]
+  subgraph guestPool["Isolated guest pool (Docker or KVM)"]
     guest["Ubuntu 18.04.6 guest"]
     guestAgent["Guest agent and availability probes"]
   end
@@ -74,7 +74,7 @@ flowchart TB
 
 롤아웃과 학습은 같은 GPU에서 겹치지 않는다. 롤아웃 때는 vLLM 두 개다. 포트가 갈라져 있고, 어댑터도 갈라져 있다. 학습 때는 그 궤적을 schema v1으로 모아 GRPO를 돌리고, 2세대부터 DPO를 얹는다.
 
-게스트는 CPU만 쓴다. 16대를 목표로 두되, 코어가 모자라면 줄인다. 스냅샷 복원이 기본이다. 콜드 부팅으로 에피소드를 돌리지 않는다.
+게스트는 CPU만 쓴다. 16대를 목표로 두되, 코어가 모자라면 줄인다. Docker 환경에서는 컨테이너 재현 및 호스트 `/proc` 검증(`docker_backend.py`)을 쓰고, KVM 환경에서는 스냅샷 SHA-256 검증 복원(`snapshot.py`, `vm_pool.py`)이 기본이다. 콜드 부팅으로 에피소드를 돌리지 않는다.
 
 ## 학습이 먹는 신호
 
@@ -140,7 +140,21 @@ SPIN을 재현한다고 쓰지 않는다. 짝을 만드는 습관만 빌았습�
 
 게스트 네트워크는 기본적으로 나가지 못한다. 본인 머신이나 허가받은 랩에서만 돌린다.
 
+## 저장소 구성 및 콘솔 도구
+
+저장소 구조 및 도구 체계는 다음과 같다:
+- `train/`: trajectory schema v1 (`schema_v1.py`), 에피소드 러너 (`episode_runner.py`), RAE (`rae.py`), PFSP-8 풀 (`pfsp.py`), DPO 쌍 추출 (`dpo_pairs.py`), veRL 변환 (`convert_verl.py`), 밴드패스/킬스위치 (`bandpass.py`), 모델 패밀리 팩 (`family.py`), 가중치 아카이브 관리 (`archive.py`), 종합 리뷰 리포트 (`review.py`).
+- `env/`: 게스트 격리 백엔드 인터페이스 (`backend.py`), Docker 백엔드 (`docker_backend.py`), libvirt/KVM 설정 (`libvirt/`), vsock RPC 클라이언트 (`guest_agent_client.py`), 게스트 데몬 (`guest-agent/`), 호스트 프로브 (`probes.py`), 가용성 검사 (`availability.py`), 스냅샷 검증 (`snapshot.py`), VM 풀 (`vm_pool.py`).
+- `harness/`: Pi 세션 연동 및 턴 교대 클록 TypeScript 코드 (`execution_env.ts`, `turn_clock.ts`, `session_factory.ts`, `models.json`).
+- `eval/`: tier-3 평가 계획 생성 및 러너 (`run_tier3.py`), 절차적 템플릿 (`procedural/`), InterCode 연동 (`intercode/`), ReAct 베이스라인 (`react_baseline.py`).
+- `cli/`: Textual 기반 연구용 터미널 UI `ultron-sim` (`ultron-sim console`) 및 실시간 게스트 짐 시뮬레이터 `ultron-sim demo`.
+- `configs/`: 기본 모델/학습/평가 설정 및 패밀리별 설정(`configs/families/qwen-8b/`, `configs/families/gemma/`).
+- `scripts/`: 베어메탈/클라우드 부트스트랩, tmux 격리 잡 관리, vLLM 서빙, 롤아웃 워커, GRPO/DPO 학습, 세대 전체 파이프라인.
+
+실험 콘솔은 `ultron-sim`으로 실행하며, 액션 선택(`enter`), 모델 패밀리 변경(`m`), 잡 모니터링(`j`), 결과/리뷰 확인(`r`), 테스트 실행(`t`)을 지원한다.
+
 ## 다른 문서
 
 - [README.md](README.md). 설치, 테스트, 디렉터리 맵.
-- [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md). 베어메탈, KVM, vLLM, 세대 루프. 서버에서 돌릴 때는 이쪽이 기준이다.
+- [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md). 베어메탈, KVM, Docker, vLLM, 세대 루프. 서버에서 돌릴 때는 이쪽이 기준이다.
+- [docs/BARE_METAL_PROVIDERS.md](docs/BARE_METAL_PROVIDERS.md). GPU 베어메탈 및 클라우드 호스트 비교.
