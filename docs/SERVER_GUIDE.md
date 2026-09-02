@@ -374,7 +374,7 @@ curl -fsS http://127.0.0.1:8001/v1/models | jq
 curl -fsS http://127.0.0.1:8002/v1/models | jq
 ```
 
-Send one structured canary request to each endpoint and verify the selected model IDs are `attacker-lora` and `defender-lora`. The launchers pass `enable_thinking=false` through chat-template kwargs. Confirm your pinned vLLM revision honors that argument before M5.
+Send one structured canary request to each endpoint and verify the selected model IDs are `attacker-lora` and `defender-lora`. The launchers pass `enable_thinking=false` through chat-template kwargs. Confirm your pinned vLLM revision honors that argument before M5. Families are a separate option (`ULTRON_MODEL_FAMILY` or `--family` on generation and train scripts). The default 4B job still passes thinking-off. Gemma omits that flag.
 
 Stop both vLLM sessions before training:
 

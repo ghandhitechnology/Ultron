@@ -59,6 +59,18 @@ Generation, rollout, GRPO, DPO, and vLLM launchers start in named tmux sessions 
 
 Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
 
+## Model families
+
+A job pins one base-model family. Unset family is `qwen-4b` (`Qwen/Qwen3.5-4B`) and keeps the original `configs/` files plus `data/checkpoints` and `data/archives`. `qwen-8b` is `Qwen/Qwen3-8B`. `gemma` is `google/gemma-2-9b-it`. Those two live under `configs/families/<name>/` and write under `data/families/<name>/`.
+
+```bash
+./scripts/run_generation.sh 0
+./scripts/run_generation.sh --family qwen-8b 0
+ULTRON_MODEL_FAMILY=gemma ./scripts/serve_vllm_attacker.sh
+```
+
+`--family` and `ULTRON_MODEL_FAMILY` are the selector. `ULTRON_BASE_MODEL` is not. If that variable is set and disagrees with the pack, the job exits. Gemma omits vLLM `--chat-template-kwargs`. Qwen packs pass thinking off.
+
 ## Experiment console
 
 `ultron-sim` opens a full-screen TUI for the research loop: pick a generation, launch rollout or training, watch tmux jobs, run unit tests, and fetch `review.md` results.
