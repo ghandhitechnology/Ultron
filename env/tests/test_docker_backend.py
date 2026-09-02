@@ -100,6 +100,40 @@ def test_confirm_root_never_invokes_docker_exec(tmp_path: Path) -> None:
     assert all(len(cmd) < 2 or cmd[1] != "exec" for cmd in runner.calls)
 
 
+class CopyAndIdRunner:
+    def __init__(self, container_id: str = "abc123containerid") -> None:
+        self.calls: list[list[str]] = []
+        self.container_id = container_id
+
+    def __call__(self, args: list[str], **kwargs: object) -> CompletedProcess[str]:
+        argv = list(args)
+        self.calls.append(argv)
+        if len(argv) >= 2 and argv[1] == "inspect":
+            fmt = argv[argv.index("--format") + 1] if "--format" in argv else ""
+            if ".State.Pid" in fmt:
+                return CompletedProcess(argv, 0, "42\n")
+            if ".Id" in fmt:
+                return CompletedProcess(argv, 0, self.container_id + "\n")
+            return CompletedProcess(argv, 0, "42\n")
+        if len(argv) >= 2 and argv[1] == "cp":
+            Path(argv[3]).write_text("attacker:x:1000:1000::/home/attacker:/bin/sh\n")
+            return CompletedProcess(argv, 0, "")
+        return CompletedProcess(argv, 1, "")
+
+
+def test_confirm_root_host_proc_fallback_without_guest_root(tmp_path: Path) -> None:
+    runner = CopyAndIdRunner()
+    host_proc = tmp_path / "99"
+    host_proc.mkdir()
+    (host_proc / "status").write_text("Name:\tpython\nUid:\t1000\t0\t0\t0\n")
+    (host_proc / "cgroup").write_text("0::/docker/abc123containerid\n")
+    backend = DockerBackend(run=runner, proc_root=tmp_path)
+
+    assert backend.confirm_root(_guest(), "attacker") is True
+    assert all(len(cmd) < 2 or cmd[1] != "exec" for cmd in runner.calls)
+    assert any(len(cmd) >= 2 and cmd[1] == "cp" for cmd in runner.calls)
+
+
 def test_verify_image_mismatch_raises() -> None:
     runner = FakeRunner(inspect_stdout="sha256:other\n")
     backend = DockerBackend(run=runner, proc_root=Path("/unused"))
@@ -119,6 +153,18 @@ def test_restore_issues_rm_create_start() -> None:
     assert ("docker", "create") in prefixes
     assert ("docker", "start") in prefixes
     create = next(cmd for cmd in runner.calls if cmd[:2] == ["docker", "create"])
+    inspect = next(cmd for cmd in runner.calls if cmd[:2] == ["docker", "inspect"])
+    fmt = inspect[inspect.index("--format") + 1]
     assert "--cpus" in create and "--memory" in create
+    assert "index" in fmt and "ultron-isolated" in fmt and "IPAddress" in fmt
     assert handle.guest_id == "guest-1"
+    assert handle.host_address == "10.0.0.8"
     assert handle.image_ref == "ultron/golden:latest"
+
+
+def test_restore_requires_network_ip() -> None:
+    runner = FakeRunner(inspect_stdout="<no value>\n")
+    backend = DockerBackend(run=runner, proc_root=Path("/unused"))
+
+    with pytest.raises(RuntimeError, match="assigned no IP"):
+        backend.restore("guest-1", "ultron/golden:latest", timeout_s=30)

@@ -26,6 +26,15 @@ Train and serve need NVIDIA GPUs and Docker. They do not need `/dev/kvm`. Isolat
 
 M0 on Docker is `./scripts/bootstrap_cloud.sh`, one container started from the golden image, and `confirm_root` returning false when the in-guest claim is uid 0. Bind vLLM to `127.0.0.1` so guests cannot reach the adapters.
 
+Before spending time on a golden Ubuntu 18.04 image, run the baby guest. It is a tiny Alpine container that exercises `DockerBackend` restore, `exec_as_user`, host `/proc` `confirm_root`, availability, loopback isolation, and one `EpisodeRunner` cycle:
+
+```bash
+python -m pip install -e '.[dev]'
+./scripts/baby_cloud_smoke.sh
+```
+
+Add `--require-gpu` to also fail when `nvidia-smi` is missing. The baby run should finish in about a minute.
+
 Ubuntu 18.04 systemd on a cgroup v2 host may fail service availability. If ssh or nginx do not start unprivileged, do not train on that host.
 
 ## 2. Install the host OS
