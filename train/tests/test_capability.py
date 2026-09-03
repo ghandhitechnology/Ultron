@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -217,6 +218,37 @@ def test_lib_capability_runs_before_host_gates() -> None:
         assert "lib_capability.sh" in text
         assert "ultron_check_model_capability" in text
         assert text.index("ultron_check_model_capability") < text.index("nvidia-smi")
+
+
+def test_skip_env_bypasses_the_check() -> None:
+    result = subprocess.run(
+        ["bash", "-c", "set -euo pipefail; source scripts/lib_capability.sh; ultron_check_model_capability"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "ULTRON_SKIP_MODEL_CAPABILITY": "1"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Skipping model capability check" in result.stdout
+
+
+def test_bootstrap_cloud_stops_before_host_gates_when_unfit() -> None:
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts" / "bootstrap_cloud.sh")],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        env={key: value for key, value in os.environ.items() if key != "ULTRON_SKIP_MODEL_CAPABILITY"},
+    )
+    text = result.stdout + result.stderr
+    assert "=== Model capability ===" in text
+    if "No supported family fits this host." in text:
+        assert result.returncode == 1
+        assert "Cloud host gates failed" not in text
+        assert "MISSING: docker" not in text
+        assert "MISSING: nvidia-smi" not in text
 
 
 def test_payload_marks_selected_skip() -> None:
