@@ -22,7 +22,7 @@ if [[ "${ROLE}" != "attacker" && "${ROLE}" != "defender" ]]; then
   echo "--role must be attacker or defender" >&2
   exit 2
 fi
-if [[ -z "${GENERATION}" || "${GENERATION}" -lt 2 ]]; then
+if [[ -z "${GENERATION}" || ! "${GENERATION}" =~ ^[0-9]+$ || "${GENERATION}" -lt 2 ]]; then
   echo "DPO requires --generation 2 or later." >&2
   exit 2
 fi

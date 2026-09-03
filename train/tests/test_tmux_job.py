@@ -144,6 +144,59 @@ def test_job_survives_sighup(job_env: dict[str, str], tmp_path: Path) -> None:
         run_job(["stop", session], job_env)
 
 
+def test_failed_job_retains_exit_status_and_can_restart(
+    job_env: dict[str, str], tmp_path: Path
+) -> None:
+    session = "ultrontest-restart"
+    attempts = tmp_path / "attempts"
+    ready = tmp_path / "ready"
+    command = (
+        f'count=0; [[ -f "{attempts}" ]] && count="$(cat "{attempts}")"; '
+        f'count=$((count + 1)); printf "%s\\n" "$count" > "{attempts}"; '
+        f'if [[ "$count" -eq 1 ]]; then exit 17; fi; touch "{ready}"; sleep 30'
+    )
+    started = run_job(["start", session, "--", "bash", "-c", command], job_env)
+    assert started.returncode == 0, started.stderr
+    try:
+        wait_until(lambda: run_job(["status", session], job_env).stdout.split("\t")[2:3] == ["1"])
+        status = run_job(["status", session], job_env)
+        assert status.returncode == 0, status.stderr
+        assert status.stdout.strip().split("\t")[4] == "17"
+
+        restarted = run_job(["restart", session], job_env)
+        assert restarted.returncode == 0, restarted.stderr
+        wait_until(ready.exists)
+        _, dead, _ = parse_status(job_env, session)
+        assert not dead
+        assert attempts.read_text().strip() == "2"
+    finally:
+        run_job(["stop", session], job_env)
+
+
+def test_wrap_recovers_an_exited_session(job_env: dict[str, str], tmp_path: Path) -> None:
+    session = "ultrontest-wrap-restart"
+    attempts = tmp_path / "wrap-attempts"
+    ready = tmp_path / "wrap-ready"
+    command = (
+        f'count=0; [[ -f "{attempts}" ]] && count="$(cat "{attempts}")"; '
+        f'count=$((count + 1)); printf "%s\\n" "$count" > "{attempts}"; '
+        f'if [[ "$count" -eq 1 ]]; then exit 9; fi; touch "{ready}"; sleep 30'
+    )
+
+    first = run_job(["wrap", session, "bash", "-c", command], job_env)
+    assert first.returncode == 0, first.stderr
+    try:
+        wait_until(lambda: run_job(["status", session], job_env).stdout.split("\t")[2:3] == ["1"])
+        second = run_job(["wrap", session, "bash", "-c", command], job_env)
+        assert second.returncode == 0, second.stderr
+        assert "Restarting exited session" in second.stdout
+        wait_until(ready.exists)
+        _, dead, _ = parse_status(job_env, session)
+        assert not dead
+    finally:
+        run_job(["stop", session], job_env)
+
+
 def test_wrap_run_generation_detaches(job_env: dict[str, str]) -> None:
     result = subprocess.run(
         ["bash", str(ROOT / "scripts" / "run_generation.sh"), "0"],

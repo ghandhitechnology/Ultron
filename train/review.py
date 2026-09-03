@@ -12,6 +12,7 @@ from typing import Any, Callable, Iterable, Mapping
 from ultron.env.backend import IsolationBackend
 
 from .bandpass import kill_switch_reason, select_profiles
+from .io import atomic_write_json, atomic_write_text
 from .pfsp import load_pool
 from .schema_v1 import ReasonCode, Role, TrajectoryV1
 
@@ -396,8 +397,8 @@ def write_review(review: JobReview, output_dir: Path) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / REVIEW_JSON
     markdown_path = output_dir / REVIEW_MARKDOWN
-    json_path.write_text(json.dumps(review.to_dict(), indent=2) + "\n")
-    markdown_path.write_text(render_markdown(review))
+    atomic_write_json(json_path, review.to_dict())
+    atomic_write_text(markdown_path, render_markdown(review))
     return json_path, markdown_path
 
 

@@ -2,6 +2,10 @@
 set -euo pipefail
 
 GEN="${GEN:-${1:-0}}"
+if [[ ! "${GEN}" =~ ^[0-9]+$ ]]; then
+  echo "Generation must be a non-negative integer." >&2
+  exit 2
+fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib_tmux.sh
 source "${ROOT}/scripts/lib_tmux.sh"
@@ -22,7 +26,7 @@ if [[ -n "${ULTRON_VLLM_CHAT_TEMPLATE_KWARGS}" ]]; then
 fi
 
 CUDA_VISIBLE_DEVICES="${ULTRON_DEFENDER_GPU:-1}" \
-python -m vllm.entrypoints.openai.api_server \
+"${ULTRON_PYTHON}" -m vllm.entrypoints.openai.api_server \
   --model "${ULTRON_PACK_BASE_MODEL}" \
   --enable-lora \
   --lora-modules "defender-lora=${ADAPTER}" \

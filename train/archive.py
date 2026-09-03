@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tarfile
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +16,7 @@ from typing import Any
 import yaml
 
 from .family import FamilyError, resolve
+from .io import atomic_write_json, atomic_write_text
 from .pfsp import PoolEntry, load_pool, save_pool, update_pool
 from .schema_v1 import Role
 
@@ -179,18 +182,21 @@ def write_index(archive_root: Path, generation: int) -> Path:
             generations.append(int(child.name[3:]))
     generations = sorted(set(generations))
     index_path = archive_root / "index.json"
-    index_path.write_text(
-        json.dumps({"latest": generation, "generations": generations, "final": FINAL_SCRIPT_NAME}, indent=2)
-        + "\n"
+    atomic_write_json(
+        index_path,
+        {"latest": generation, "generations": generations, "final": FINAL_SCRIPT_NAME},
     )
     latest = archive_root / "latest"
-    latest.unlink(missing_ok=True)
-    latest.symlink_to(f"gen{generation}")
+    temporary_link = archive_root / f".latest.{os.getpid()}.tmp"
+    temporary_link.unlink(missing_ok=True)
+    temporary_link.symlink_to(f"gen{generation}")
+    os.replace(temporary_link, latest)
     return index_path
 
 
 def write_final_script(path: Path, generation: int, checkpoint_count: int) -> None:
-    path.write_text(
+    atomic_write_text(
+        path,
         "\n".join(
             [
                 "#!/usr/bin/env bash",
@@ -232,19 +238,37 @@ def write_final_script(path: Path, generation: int, checkpoint_count: int) -> No
                 "esac",
                 "",
             ]
-        )
+        ),
+        mode=0o755,
     )
-    path.chmod(0o755)
 
 
 def publish_final(archive_root: Path, generation: int, roles: dict[str, Any], checkpoint_count: int) -> Path:
     final_dir = archive_root / "final"
-    if final_dir.exists():
-        shutil.rmtree(final_dir)
-    final_dir.mkdir(parents=True)
+    backup_dir = archive_root / ".final.previous"
+    if not final_dir.exists() and backup_dir.exists():
+        backup_dir.rename(final_dir)
+    elif final_dir.exists() and backup_dir.exists():
+        shutil.rmtree(backup_dir)
+    staging_dir = Path(tempfile.mkdtemp(prefix=".final.", dir=archive_root))
     source_gen = archive_dir(archive_root, generation)
-    for role_name in roles:
-        copy_adapter_files(source_gen / f"{role_name}_lora", final_dir / f"{role_name}_lora")
+    try:
+        for role_name in roles:
+            copy_adapter_files(
+                source_gen / f"{role_name}_lora", staging_dir / f"{role_name}_lora"
+            )
+        if final_dir.exists():
+            final_dir.rename(backup_dir)
+        staging_dir.rename(final_dir)
+    except BaseException:
+        if not final_dir.exists() and backup_dir.exists():
+            backup_dir.rename(final_dir)
+        raise
+    finally:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir)
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir)
     write_final_script(archive_root / FINAL_SCRIPT_NAME, generation, checkpoint_count)
     write_final_script(source_gen / FINAL_SCRIPT_NAME, generation, checkpoint_count)
     return archive_root / FINAL_SCRIPT_NAME
@@ -323,25 +347,30 @@ def archive_generation(
     if family is not None:
         manifest["family"] = family
     manifest_path = target / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    atomic_write_json(manifest_path, manifest)
     write_final_script(target / FINAL_SCRIPT_NAME, generation, len(checkpoints))
     write_index(archive_root, generation)
     if publish:
         final_path = publish_final(archive_root, generation, roles, len(checkpoints))
         manifest["final_script"] = str(final_path)
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        atomic_write_json(manifest_path, manifest)
     if pack:
         tarball = archive_root / f"ultron-gen{generation}.tar"
-        with tarfile.open(tarball, "w") as archive:
-            archive.add(target, arcname=f"ultron-gen{generation}")
-            final_script = archive_root / FINAL_SCRIPT_NAME
-            if final_script.is_file():
-                archive.add(final_script, arcname=FINAL_SCRIPT_NAME)
-            final_dir = archive_root / "final"
-            if final_dir.is_dir():
-                archive.add(final_dir, arcname="final")
+        temporary_tarball = archive_root / f".{tarball.name}.{os.getpid()}.tmp"
+        try:
+            with tarfile.open(temporary_tarball, "w") as archive:
+                archive.add(target, arcname=f"ultron-gen{generation}")
+                final_script = archive_root / FINAL_SCRIPT_NAME
+                if final_script.is_file():
+                    archive.add(final_script, arcname=FINAL_SCRIPT_NAME)
+                final_dir = archive_root / "final"
+                if final_dir.is_dir():
+                    archive.add(final_dir, arcname="final")
+            os.replace(temporary_tarball, tarball)
+        finally:
+            temporary_tarball.unlink(missing_ok=True)
         manifest["tarball"] = str(tarball)
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        atomic_write_json(manifest_path, manifest)
     _update_pfsp(pfsp_manifest, generation, roles)
     return manifest
 

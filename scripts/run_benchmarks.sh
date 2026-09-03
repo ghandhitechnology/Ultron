@@ -34,6 +34,10 @@ while [[ "$#" -gt 0 ]]; do
   esac
 done
 
+if [[ -n "${GEN}" && ! "${GEN}" =~ ^[0-9]+$ ]]; then
+  echo "Generation must be a non-negative integer." >&2
+  exit 2
+fi
 ultron_load_family
 SESSION="ultron-bench"
 if [[ "${ALL}" -eq 1 ]]; then
@@ -62,4 +66,4 @@ if [[ "${EXECUTE}" -eq 1 || "${ULTRON_BENCHMARK_EXECUTE:-}" == "1" ]]; then
 fi
 
 echo "=== Ultron archived-weight benchmarks ==="
-python -m ultron.eval.run_benchmarks "${ARGS[@]}"
+"${ULTRON_PYTHON}" -m ultron.eval.run_benchmarks "${ARGS[@]}"
