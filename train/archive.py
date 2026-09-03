@@ -163,9 +163,9 @@ def collect_generation_checkpoints(checkpoint_root: Path, generation: int, targe
 
 def load_base_model(config: Path = DEFAULT_MODEL_CONFIG) -> str:
     if not config.is_file():
-        return "Qwen/Qwen3.5-4B"
+        return "orcarouter/Qwen3.8-27B-Uncensored-FP8"
     payload = yaml.safe_load(config.read_text()) or {}
-    return str(payload.get("base_model") or "Qwen/Qwen3.5-4B")
+    return str(payload.get("base_model") or "orcarouter/Qwen3.8-27B-Uncensored-FP8")
 
 
 def archive_dir(archive_root: Path, generation: int) -> Path:

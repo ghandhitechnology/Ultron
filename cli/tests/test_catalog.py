@@ -57,8 +57,8 @@ def test_generation_plan_sets_episode_env() -> None:
     assert built.session == "ultron-gen-3"
     assert built.argv[-1] == "3"
     assert ("ULTRON_EPISODES", "16") in built.env
-    assert ("ULTRON_MODEL_FAMILY", "qwen-4b") in built.env
-    assert built.argv[1:3] == ("--family", "qwen-4b")
+    assert ("ULTRON_MODEL_FAMILY", "qwen-27b") in built.env
+    assert built.argv[1:3] == ("--family", "qwen-27b")
 
 
 def test_family_pin_follows_the_selector() -> None:
