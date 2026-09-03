@@ -193,6 +193,15 @@ class EvalReport:
 
 
 @dataclass(frozen=True)
+class BenchmarkReport:
+    plan_path: str | None
+    scores_path: str | None
+    plot_path: str | None
+    scored: int
+    incomplete_arms: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ArchiveReport:
     manifest_path: str | None
     roles: tuple[str, ...]
@@ -214,6 +223,7 @@ class Artifacts:
     metrics_error: str | None
     metrics: dict[str, Any]
     eval: EvalReport
+    benchmarks: BenchmarkReport
     archive: ArchiveReport
     pfsp: PfspReport
     eval_requested: bool
@@ -519,6 +529,7 @@ def render_markdown(review: JobReview) -> str:
             f"Kill switch {review.gates.kill_switch or 'clear'}.",
             f"Bandpass profiles {_join(review.gates.bandpass_profiles) or 'none'}.",
             f"Eval mode {review.artifacts.eval.expected_mode or 'none'}. Plan {review.artifacts.eval.plan_path or 'missing'}. Results {review.artifacts.eval.results_path or 'missing'}.",
+            f"External benchmarks scored {review.artifacts.benchmarks.scored}. Plan {review.artifacts.benchmarks.plan_path or 'missing'}. Plot {review.artifacts.benchmarks.plot_path or 'missing'}.",
             f"Archive manifest {review.artifacts.archive.manifest_path or 'missing'}.",
             f"PFSP entries {review.artifacts.pfsp.size}. Present {str(review.artifacts.pfsp.present).lower()}.",
             "",
@@ -873,6 +884,7 @@ def _artifacts(
     metrics_path = traces / METRICS_FILE if traces.is_dir() else traces.parent / METRICS_FILE
     metrics, metrics_error = _load_metrics(metrics_path)
     eval_report = _eval_report(eval_dir, generation) if eval_dir is not None else _empty_eval()
+    benchmark_report = _benchmark_report(eval_dir) if eval_dir is not None else _empty_benchmarks()
     archive = (
         _archive_report(archive_dir, generation)
         if archive_dir is not None
@@ -884,6 +896,7 @@ def _artifacts(
         metrics_error=metrics_error if not metrics_path.is_file() or metrics is None else None,
         metrics=metrics or {},
         eval=eval_report,
+        benchmarks=benchmark_report,
         archive=archive,
         pfsp=pfsp,
         eval_requested=eval_dir is not None,
@@ -942,6 +955,50 @@ def _eval_report(eval_dir: Path, generation: int | None) -> EvalReport:
 
 def _empty_eval() -> EvalReport:
     return EvalReport(None, None, None, None, ())
+
+
+def _empty_benchmarks() -> BenchmarkReport:
+    return BenchmarkReport(None, None, None, 0, ())
+
+
+def _benchmark_report(eval_dir: Path) -> BenchmarkReport:
+    root = eval_dir / "benchmarks"
+    plan = root / "plan.json"
+    scores = root / "scores.json"
+    plot = root / "scores.svg"
+    scored = 0
+    incomplete: tuple[str, ...] = ()
+    if scores.is_file():
+        try:
+            payload = json.loads(scores.read_text())
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            scored = int(payload.get("scored") or 0)
+            rows = payload.get("rows")
+            if isinstance(rows, list):
+                incomplete = tuple(
+                    f"{item.get('role')}/{item.get('benchmark')}/{item.get('stage_label')}"
+                    for item in rows
+                    if isinstance(item, dict)
+                    and (
+                        item.get("score") is None
+                        or item.get("status") in {"planned", "harness_missing", "failed"}
+                    )
+                )
+                if scored == 0:
+                    scored = sum(
+                        1
+                        for item in rows
+                        if isinstance(item, dict) and item.get("score") is not None
+                    )
+    return BenchmarkReport(
+        plan_path=str(plan) if plan.is_file() else None,
+        scores_path=str(scores) if scores.is_file() else None,
+        plot_path=str(plot) if plot.is_file() else None,
+        scored=scored,
+        incomplete_arms=incomplete,
+    )
 
 
 def _archive_report(archive_dir: Path, generation: int | None) -> ArchiveReport:
@@ -1478,6 +1535,49 @@ def _rule_eval(review: JobReview) -> list[Finding]:
                 FindingSeverity.WARN,
                 "Eval results list incomplete arms.",
                 arms=list(review.artifacts.eval.incomplete_arms),
+            )
+        )
+    findings.extend(_rule_benchmarks(review))
+    return findings
+
+
+def _rule_benchmarks(review: JobReview) -> list[Finding]:
+    findings: list[Finding] = []
+    report = review.artifacts.benchmarks
+    if report.plan_path and report.scores_path is None:
+        findings.append(
+            _finding(
+                "benchmark_scores_missing",
+                FindingSeverity.WARN,
+                "An external benchmark plan exists without score rows.",
+                plan=report.plan_path,
+            )
+        )
+    if report.plan_path and report.scores_path and report.scored == 0:
+        findings.append(
+            _finding(
+                "benchmark_scores_missing",
+                FindingSeverity.WARN,
+                "External benchmark scores exist but no role/benchmark cell has a numeric score.",
+                scores=report.scores_path,
+            )
+        )
+    if report.plot_path is None and report.scored:
+        findings.append(
+            _finding(
+                "benchmark_plot_missing",
+                FindingSeverity.WARN,
+                "External benchmark scores exist without scores.svg.",
+                scores=report.scores_path,
+            )
+        )
+    if report.incomplete_arms:
+        findings.append(
+            _finding(
+                "benchmark_arm_incomplete",
+                FindingSeverity.WARN,
+                "External benchmark results list incomplete arms.",
+                arms=list(report.incomplete_arms),
             )
         )
     return findings

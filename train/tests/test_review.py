@@ -424,6 +424,28 @@ def test_eval_incomplete_arms_and_bandpass_profiles(tmp_path: Path) -> None:
     assert review.artifacts.eval.incomplete_arms == ("debian12",)
 
 
+def test_complete_phase_records_benchmark_score_gaps(tmp_path: Path) -> None:
+    traces = tmp_path / "gen2"
+    write_roles(traces, [pair("ep", ReasonCode.ATTACKER_ROOT, generation=2)])
+    (traces / "metrics.json").write_text(json.dumps({"asr": 0.4}) + "\n")
+    eval_dir = tmp_path / "eval"
+    bench = eval_dir / "benchmarks"
+    bench.mkdir(parents=True)
+    (bench / "plan.json").write_text(json.dumps({"job_count": 2}) + "\n")
+    (eval_dir / "tier3_light_plan.json").write_text(json.dumps({"mode": "light"}) + "\n")
+    (eval_dir / "tier3_light_results.json").write_text(json.dumps({"rows": []}) + "\n")
+    review = review_traces(
+        traces,
+        phase=Phase.COMPLETE,
+        generation=2,
+        eval_dir=eval_dir,
+    )
+    codes = finding_codes(review)
+    assert "benchmark_scores_missing" in codes
+    markdown = write_review(review, traces)[1].read_text()
+    assert "External benchmarks scored 0" in markdown
+
+
 def test_metrics_mismatch_and_markdown_write(tmp_path: Path) -> None:
     traces = tmp_path / "gen0"
     write_roles(

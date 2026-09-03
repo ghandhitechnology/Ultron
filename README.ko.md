@@ -246,7 +246,7 @@ SUID를 찾거나, 쓸 수 있는 경로를 찾거나, 셸이 뜨면 처음 한 
 - `train/`: trajectory schema v1 (`schema_v1.py`), 에피소드 러너 (`episode_runner.py`), RAE (`rae.py`), PFSP-8 풀 (`pfsp.py`), DPO 쌍 추출 (`dpo_pairs.py`), veRL 변환 (`convert_verl.py`), 밴드패스/킬스위치 (`bandpass.py`), 모델 패밀리 팩 (`family.py`), 가중치 아카이브 관리 (`archive.py`), 종합 리뷰 리포트 (`review.py`).
 - `env/`: 게스트 격리 백엔드 인터페이스 (`backend.py`), Docker 백엔드 (`docker_backend.py`), libvirt/KVM 설정 (`libvirt/`), vsock RPC 클라이언트 (`guest_agent_client.py`), 게스트 데몬 (`guest-agent/`), 호스트 프로브 (`probes.py`), 가용성 검사 (`availability.py`), 스냅샷 검증 (`snapshot.py`), VM 풀 (`vm_pool.py`).
 - `harness/`: Pi 세션 연동 및 턴 교대 클록 TypeScript 코드 (`execution_env.ts`, `turn_clock.ts`, `session_factory.ts`, `models.json`).
-- `eval/`: tier-3 평가 계획 생성 및 러너 (`run_tier3.py`), 절차적 템플릿 (`procedural/`), InterCode 연동 (`intercode/`), ReAct 베이스라인 (`react_baseline.py`).
+- `eval/`: tier-3 평가 계획 생성 및 러너 (`run_tier3.py`), 테스트 이후 아카이브 가중치 공개 벤치마크 (`benchmarks.py`, `run_benchmarks.py`), 절차적 템플릿 (`procedural/`), InterCode 연동 (`intercode/`), ReAct 베이스라인 (`react_baseline.py`).
 - `cli/`: Textual 기반 연구용 터미널 UI `ultron-sim` (`ultron-sim console`) 및 실시간 게스트 짐 시뮬레이터 `ultron-sim demo`.
 - `configs/`: 기본 모델/학습/평가 설정 및 패밀리별 설정(`configs/families/qwen-8b/`, `configs/families/gemma/`).
 - `scripts/`: 베어메탈/클라우드 부트스트랩, tmux 격리 잡 관리, vLLM 서빙, 롤아웃 워커, GRPO/DPO 학습, 세대 전체 파이프라인.

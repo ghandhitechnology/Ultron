@@ -28,6 +28,10 @@ eval:
     procedural_n: 20
     intercode_smoke: true
   gen4_full: tier3
+  benchmarks:
+    after_tests: true
+    source: archives
+    suites: [exploitbench, deep_swe, terminal_bench]
 kill_switch:
   asr_stuck_after_gen0: [0.0, 1.0]
   zero_variance_rollouts: 200
