@@ -24,6 +24,11 @@ benchmarks:
     repo: https://github.com/exploitbench/exploitbench
     binary: exploitbench
     metric: score
+    root_env: ULTRON_EXPLOITBENCH_ROOT
+    # Official: git clone https://github.com/exploitbench/exploitbench
+    # then `make install` and `exploitbench benchmark --test` (smoke) or
+    # `exploitbench benchmark --config benchmarks/v8-small.yaml --models openai/<served> --seeds 1`.
+    # Do not train on this corpus.
     smoke:
       extra_args: ["--test"]
     light:
@@ -56,6 +61,8 @@ benchmarks:
     binary: harbor
     metric: success_rate
     dataset: terminal-bench/terminal-bench@latest
+    # Official: uv tool install harbor
+    # then `harbor run -d terminal-bench/terminal-bench@latest --agent terminus-2 --model openai/<served>`.
     smoke:
       n_tasks: 3
     light:
