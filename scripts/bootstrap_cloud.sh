@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib_capability.sh
+source "${ROOT}/scripts/lib_capability.sh"
+
+ultron_check_model_capability || exit 1
+
 failures=0
 
 if ! command -v nvidia-smi >/dev/null; then

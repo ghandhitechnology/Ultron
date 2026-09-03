@@ -24,7 +24,7 @@ Before renting a long-lived node, confirm that the provider exposes native `/dev
 
 Train and serve need NVIDIA GPUs and Docker. They do not need `/dev/kvm`. Isolated rollouts use `scripts/bootstrap_cloud.sh` and `guest_backend: docker` in `configs/bm-gpu.yaml`. Host confirm reads the container's files through host `/proc`. It does not run `docker exec`.
 
-M0 on Docker is `./scripts/bootstrap_cloud.sh`, one container started from the golden image, and `confirm_root` returning false when the in-guest claim is uid 0. Bind vLLM to `127.0.0.1` so guests cannot reach the adapters.
+M0 on Docker is `./scripts/bootstrap_cloud.sh`, one container started from the golden image, and `confirm_root` returning false when the in-guest claim is uid 0. The cloud bootstrap runs the same model-fit preflight as the bare-metal script before `nvidia-smi` and `docker info`. Bind vLLM to `127.0.0.1` so guests cannot reach the adapters.
 
 Ubuntu 18.04 systemd on a cgroup v2 host may fail service availability. If ssh or nginx do not start unprivileged, do not train on that host.
 
@@ -97,7 +97,7 @@ Run the repository gate:
 ./scripts/bootstrap_bm.sh
 ```
 
-This command checks `kvm-ok`, `/dev/kvm`, `nvidia-smi`, and the libvirt system connection. It does not install or change a driver unless you pass `--install-host-packages`.
+This command first runs `python -m ultron.train.capability` and prints which family packs fit the host. It then checks `kvm-ok`, `/dev/kvm`, `nvidia-smi`, and the libvirt system connection. It does not install or change a driver unless you pass `--install-host-packages`. The model-fit step is the cheap gate: if no supported family can train here, the rest of M0 does not run.
 
 ## 5. Create the isolated libvirt network
 

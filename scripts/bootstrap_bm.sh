@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib_capability.sh
+source "${ROOT}/scripts/lib_capability.sh"
+
 if [[ "${1:-}" == "--install-host-packages" ]]; then
   if [[ "${EUID}" -ne 0 ]]; then
     echo "Run --install-host-packages as root." >&2
@@ -14,6 +18,8 @@ if [[ "${1:-}" == "--install-host-packages" ]]; then
   echo "Install the recommended NVIDIA datacenter driver, reboot, then rerun without flags."
   exit 0
 fi
+
+ultron_check_model_capability || exit 1
 
 failures=0
 for command in kvm-ok virsh nvidia-smi; do

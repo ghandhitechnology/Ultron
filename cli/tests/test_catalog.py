@@ -109,6 +109,13 @@ def test_tests_plan_selects_suite_paths() -> None:
     assert built.argv[-2:] == ("cli/tests", "-q")
 
 
+def test_capability_plan_is_the_preflight() -> None:
+    built = plan(ActionId.CAPABILITY, {}, root=ROOT)
+    assert isinstance(built, ForegroundPlan)
+    assert built.argv[-1] == "ultron.train.capability"
+    assert built.title == "model capability"
+
+
 def test_all_tests_score_archives_after_pytest() -> None:
     built = plan(ActionId.TESTS, {"suite": "all"}, root=ROOT)
     assert isinstance(built, ForegroundPlan)
