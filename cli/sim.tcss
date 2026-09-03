@@ -18,25 +18,24 @@ Screen {
     border-bottom: solid #45475a;
 }
 
-#sprites {
-    height: 9;
-    padding: 0 1;
-    color: #cdd6f4;
-    background: #11111b;
-    border-bottom: solid #45475a;
-}
-
 #arena {
-    height: 12;
+    height: 5;
     padding: 0 1;
+    background: #181825;
+    border-bottom: solid #45475a;
 }
 
 #attacker, #sandbox, #defender {
     width: 1fr;
     height: 1fr;
-    padding: 1 1;
-    border: solid #45475a;
+    padding: 0 1;
+    border: none;
+    border-right: solid #45475a;
     background: #181825;
+}
+
+#defender {
+    border-right: none;
 }
 
 #attacker {
@@ -52,30 +51,41 @@ Screen {
 }
 
 #attacker:hover, #sandbox:hover, #defender:hover, #attacker:focus, #sandbox:focus, #defender:focus {
-    border: solid #89b4fa;
+    background: #24243b;
 }
 
 #detail {
-    height: 12;
+    height: 9;
     padding: 1 2;
-    border: solid #89b4fa;
-    background: #181825;
+    border-bottom: solid #6c5ce7;
+    background: #24243b;
     color: #cdd6f4;
+}
+
+#transcript-header {
+    height: 2;
+    margin: 0 1;
+    padding: 0 1;
+    content-align: left middle;
+    background: #302f55;
+    color: #e5e7f2;
+    text-style: bold;
 }
 
 #log {
     height: 1fr;
-    min-height: 6;
-    padding: 0 1;
-    border-top: solid #45475a;
-    background: #11111b;
-    color: #a6adc8;
-    scrollbar-background: #11111b;
-    scrollbar-color: #45475a;
+    min-height: 12;
+    padding: 1 2;
+    background: #1e1e2e;
+    color: #e5e7f2;
+    scrollbar-background: #181825;
+    scrollbar-color: #585b70;
+    scrollbar-color-hover: #6c5ce7;
+    scrollbar-color-active: #89b4fa;
 }
 
 #progress {
-    height: 5;
+    height: 4;
     padding: 0 1;
     color: #a6e3a1;
     background: #181825;

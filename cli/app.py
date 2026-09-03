@@ -10,7 +10,6 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import RichLog, Static
 
 from ultron.cli.model import InvalidTransition, JobMeta, JobSnapshot, Phase, apply, initial_snapshot
-from ultron.cli.pixel import mascot_strip
 from ultron.cli.render import (
     attacker_pane,
     defender_pane,
@@ -19,6 +18,8 @@ from ultron.cli.render import (
     header_line,
     progress_block,
     sandbox_pane,
+    transcript_entry,
+    transcript_header,
 )
 
 CSS_PATH = Path(__file__).with_name("sim.tcss")
@@ -45,6 +46,9 @@ class SimApp(App[None]):
         Binding("d", "expand('defender')", "defender", show=True),
         Binding("t", "expand('tool')", "tool", show=True),
         Binding("l", "collapse", "log", show=False),
+        Binding("pageup", "transcript_page_up", "older", show=True),
+        Binding("pagedown", "transcript_page_down", "newer", show=True),
+        Binding("end", "transcript_live", "live", show=True),
     ]
 
     def __init__(
@@ -62,27 +66,24 @@ class SimApp(App[None]):
         self.sim = sim
         self.snapshot: JobSnapshot = initial_snapshot(meta, started_at_s=0.0)
         self.expanded: str | None = None
-        self._log_index = 0
         self._done = False
-        self._pixel_tick = 0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="frame"):
             yield Static(id="header")
-            yield Static(id="sprites")
             with Horizontal(id="arena"):
                 yield HotPane("attacker", id="attacker")
                 yield HotPane("sandbox", id="sandbox")
                 yield HotPane("defender", id="defender")
             yield Static(id="detail")
-            yield RichLog(id="log", highlight=False, markup=False, wrap=True)
+            yield Static(id="transcript-header")
+            yield RichLog(id="log", highlight=False, markup=True, wrap=True)
             yield Static(id="progress")
             yield Static(id="status")
 
     def on_mount(self) -> None:
         self.query_one("#detail", Static).display = False
         self.set_interval(0.05, self._drain)
-        self.set_interval(0.16, self._tick_pixels)
         self._paint()
 
     def action_expand(self, pane: str) -> None:
@@ -93,8 +94,22 @@ class SimApp(App[None]):
         self.expanded = None
         self._paint()
 
+    def action_transcript_page_up(self) -> None:
+        log = self.query_one("#log", RichLog)
+        log.auto_scroll = False
+        log.scroll_page_up()
+
+    def action_transcript_page_down(self) -> None:
+        self.query_one("#log", RichLog).scroll_page_down()
+
+    def action_transcript_live(self) -> None:
+        log = self.query_one("#log", RichLog)
+        log.auto_scroll = True
+        log.scroll_end(animate=False)
+
     def _drain(self) -> None:
         drained = False
+        log = self.query_one("#log", RichLog)
         while True:
             try:
                 item = self.events.get_nowait()
@@ -110,17 +125,14 @@ class SimApp(App[None]):
                 if self.snapshot.phase in (Phase.COMPLETE, Phase.FAILED):
                     break
                 self.snapshot = replace(self.snapshot, phase=Phase.FAILED, error=str(exc))
+            log.write(transcript_entry(item))
         if drained:
             self._paint()
-
-    def _tick_pixels(self) -> None:
-        self._pixel_tick += 1
-        self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
 
     def _paint(self) -> None:
         snap = self.snapshot
         self.query_one("#header", Static).update(header_line(snap))
-        self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
+        self.query_one("#transcript-header", Static).update(transcript_header(snap))
         self.query_one("#progress", Static).update(progress_block(snap))
         self.query_one("#status", Static).update(footer_line(snap, sim=self.sim))
         arena = self.query_one("#arena", Horizontal)
@@ -135,7 +147,3 @@ class SimApp(App[None]):
             self.query_one("#attacker", HotPane).update(attacker_pane(snap))
             self.query_one("#sandbox", HotPane).update(sandbox_pane(snap))
             self.query_one("#defender", HotPane).update(defender_pane(snap))
-        log = self.query_one("#log", RichLog)
-        while self._log_index < len(snap.log):
-            log.write(snap.log[self._log_index])
-            self._log_index += 1

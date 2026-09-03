@@ -1,6 +1,23 @@
 from __future__ import annotations
 
-from ultron.cli.model import JobProgress, JobSnapshot, Phase, estimate_eta_s, progress
+from ultron.cli.model import (
+    EpisodeEnded,
+    JobEnded,
+    JobError,
+    JobEvent,
+    JobProgress,
+    JobSnapshot,
+    Phase,
+    ProbeFinished,
+    ProbeStarted,
+    RestoreFinished,
+    RestoreStarted,
+    ToolObserved,
+    TurnEnded,
+    TurnStarted,
+    estimate_eta_s,
+    progress,
+)
 from ultron.train.schema_v1 import ReasonCode, Role
 
 BLOCK = "█"
@@ -70,20 +87,192 @@ def progress_block(snapshot: JobSnapshot) -> str:
         f"{format_bar(ep_ratio, 28)}{mean}\n"
         f"  TURNS     {_turn_display(snapshot, prog):>2} / {prog.total_turns:<2}   "
         f"{format_bar(turn_ratio, 28)}   {snapshot.phase.value}\n"
-        f"  {_outcome_strip(snapshot)}   click a/s/d/t · esc fold · q quit"
+        f"  {_outcome_strip(snapshot)}   pgup/pgdn scroll · end live · a/s/d/t inspect · q quit"
     )
+
+
+def transcript_header(snapshot: JobSnapshot) -> str:
+    episode = min(snapshot.episode_index + 1, snapshot.meta.episodes_planned)
+    return (
+        f"› EPISODE {episode}/{snapshot.meta.episodes_planned}  "
+        f"ATTACKER ↔ SANDBOX ↔ DEFENDER  ·  FULL INTERACTION"
+    )
+
+
+def transcript_entry(event: JobEvent) -> str:
+    stamp = _fmt_clock(event.at_s)
+    if isinstance(event, RestoreStarted):
+        return _entry(
+            stamp,
+            "GUEST",
+            "#585b70",
+            f"restore {event.guest_id}",
+            [f"image {event.image_ref} · {event.isolation.value} isolation"],
+        )
+    if isinstance(event, RestoreFinished):
+        return _entry(
+            stamp,
+            "READY",
+            "#585b70",
+            event.guest_id,
+            [f"{event.host_address} · restored in {_fmt_dur(event.duration_s)}"],
+            result="success",
+        )
+    if isinstance(event, TurnStarted):
+        color = "#b44c6d" if event.role is Role.ATTACKER else "#39745e"
+        return _entry(
+            stamp,
+            event.role.value.upper(),
+            color,
+            f"turn {event.turn_index + 1}",
+            ["agent is reasoning and selecting an action"],
+        )
+    if isinstance(event, ToolObserved):
+        color = "#b44c6d" if event.role is Role.ATTACKER else "#39745e"
+        command = str(event.tool.args.get("cmd") or event.tool.args.get("url") or "")
+        code = "—" if event.tool.exit_code is None else str(event.tool.exit_code)
+        output = _tool_output_lines(event.tool.stdout_head, event.tool.stdout_tail)
+        output.append(f"exit {code} · {event.tool.duration_ms}ms")
+        result = "success" if event.tool.exit_code in (0, None) else "error"
+        return _entry(
+            stamp,
+            event.tool.name.upper(),
+            color,
+            command,
+            output,
+            result=result,
+        )
+    if isinstance(event, TurnEnded):
+        color = "#b44c6d" if event.role is Role.ATTACKER else "#39745e"
+        return _entry(
+            stamp,
+            "DONE",
+            color,
+            f"{event.role.value} turn {event.turn_index + 1}",
+            [f"{event.step_count} step(s) · {_fmt_dur(event.duration_s)}"],
+            result="success",
+        )
+    if isinstance(event, ProbeStarted):
+        return _entry(
+            stamp,
+            "PROBE",
+            "#585b70",
+            f"episode {event.episode_index + 1}",
+            ["checking root and service availability"],
+        )
+    if isinstance(event, ProbeFinished):
+        result = event.result
+        success = result.infra_ok and result.availability_ok
+        return _entry(
+            stamp,
+            "PROBE",
+            "#585b70",
+            f"euid {result.guest_attacker_euid}",
+            [
+                f"host root {str(result.host_confirmed_root).lower()} · "
+                f"availability {str(result.availability_ok).lower()}"
+            ],
+            result="success" if success else "error",
+        )
+    if isinstance(event, EpisodeEnded):
+        terminal = event.terminal
+        return _entry(
+            stamp,
+            "RESULT",
+            "#6c5ce7",
+            terminal.reason_code.value,
+            [
+                f"attacker {terminal.attacker_reward:g} · "
+                f"defender {terminal.defender_reward:g} · {_fmt_dur(event.duration_s)}"
+            ],
+            result="success",
+        )
+    if isinstance(event, JobEnded):
+        return _entry(
+            stamp,
+            "COMPLETE",
+            "#6c5ce7",
+            "all planned episodes finished",
+            [f"job duration {_fmt_dur(event.duration_s)}"],
+            result="success",
+        )
+    if isinstance(event, JobError):
+        return _entry(
+            stamp,
+            "ERROR",
+            "#b44c6d",
+            event.operation,
+            [event.message],
+            result="error",
+        )
+    raise TypeError(f"unhandled transcript event {type(event)!r}")
+
+
+def _entry(
+    stamp: str,
+    label: str,
+    color: str,
+    title: str,
+    details: list[str],
+    *,
+    result: str | None = None,
+) -> str:
+    safe_label = _escape_markup(label)
+    safe_title = _escape_markup(title or "—")
+    first = (
+        f"[dim #6c7086]{stamp}[/] "
+        f"[bold #f5f5ff on {color}] {safe_label:<8} [/bold #f5f5ff on {color}] "
+        f"[#e5e7f2]{safe_title}[/]"
+    )
+    detail_color = "#a6adc8"
+    marker = "└"
+    if result == "success":
+        detail_color = "#63d2a0"
+        marker = "✓"
+    elif result == "error":
+        detail_color = "#f38ba8"
+        marker = "×"
+    rows = [first]
+    for index, detail in enumerate(details):
+        branch = marker if index == len(details) - 1 else "│"
+        rows.append(
+            f"[dim #6c7086]     {branch}[/] [{detail_color}]{_escape_markup(detail)}[/]"
+        )
+    return "\n".join(rows) + "\n"
+
+
+def _tool_output_lines(stdout_head: str, stdout_tail: str) -> list[str]:
+    head = stdout_head.rstrip().splitlines()
+    tail = stdout_tail.rstrip().splitlines()
+    if tail and tail != head[-len(tail) :]:
+        lines = head + (["…"] if head else []) + tail
+    else:
+        lines = head
+    return lines or ["no output"]
+
+
+def _escape_markup(value: object) -> str:
+    return str(value).replace("[", "\\[")
+
+
+def _fmt_clock(at_s: float) -> str:
+    total = max(0, int(at_s))
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def _fmt_dur(duration_s: float) -> str:
+    if duration_s < 1:
+        return f"{int(duration_s * 1000)}ms"
+    return f"{duration_s:.1f}s"
 
 
 def attacker_pane(snapshot: JobSnapshot) -> str:
     return "\n".join(
         [
-            "ATTACKER",
+            f"ATTACKER  {_side_state(snapshot, Role.ATTACKER)}",
             "attacker_lora",
-            _side_state(snapshot, Role.ATTACKER),
-            f"turn {_turn_label(snapshot, Role.ATTACKER)}",
-            f"tools {snapshot.attacker_tools}",
-            f"last {snapshot.last_attacker}",
-            "════ exploit ════▶",
+            f"turn {_turn_label(snapshot, Role.ATTACKER)} · tools {snapshot.attacker_tools}",
+            f"last  {snapshot.last_attacker}",
         ]
     )
 
@@ -91,13 +280,10 @@ def attacker_pane(snapshot: JobSnapshot) -> str:
 def defender_pane(snapshot: JobSnapshot) -> str:
     return "\n".join(
         [
-            "DEFENDER",
+            f"DEFENDER  {_side_state(snapshot, Role.DEFENDER)}",
             "defender_lora",
-            _side_state(snapshot, Role.DEFENDER),
-            f"turn {_turn_label(snapshot, Role.DEFENDER)}",
-            f"tools {snapshot.defender_tools}",
-            f"last {snapshot.last_defender}",
-            "◀════ policy ════",
+            f"turn {_turn_label(snapshot, Role.DEFENDER)} · tools {snapshot.defender_tools}",
+            f"last  {snapshot.last_defender}",
         ]
     )
 
@@ -116,15 +302,10 @@ def sandbox_pane(snapshot: JobSnapshot) -> str:
     isolation = snapshot.meta.isolation.value
     return "\n".join(
         [
-            "SANDBOX",
-            "┌────────────────────┐",
-            f"│ {isolation:<18} │",
-            f"│ {guest:<18} │",
-            f"│ {host:<18} │",
-            f"│ {image[:18]:<18} │",
-            f"│ {euid:<8} {avail:<9} │",
-            f"│ {root:<18} │",
-            "└────────────────────┘",
+            f"SANDBOX  {isolation}",
+            f"{guest} · {host}",
+            f"{image[:24]}",
+            f"{euid} · {avail} · {root}",
         ]
     )
 
