@@ -1,7 +1,14 @@
 from ultron.cli.demo import make_demo
 from ultron.cli.model import JobMeta, apply, initial_snapshot
 from ultron.cli.observe import drive_job
-from ultron.cli.render import arena_block, format_eta, header_line, progress_block
+from ultron.cli.render import (
+    arena_block,
+    format_eta,
+    header_line,
+    progress_block,
+    transcript_entry,
+    transcript_header,
+)
 from ultron.env.backend import IsolationBackend
 
 
@@ -44,3 +51,23 @@ def test_arena_names_both_agents_and_sandbox() -> None:
     bars = progress_block(snap)
     assert "EPISODES" in bars
     assert "TURNS" in bars
+
+
+def test_transcript_exposes_tool_command_output_and_status() -> None:
+    meta = JobMeta(
+        generation=0,
+        profile_id="web",
+        isolation=IsolationBackend.DOCKER,
+        episodes_planned=1,
+        turns_per_side=1,
+    )
+    runner, cases = make_demo(meta, delay_s=0.0, sleep=lambda _s: None)
+    events: list = []
+    drive_job(meta, runner, cases, emit=events.append, clock=lambda: 0.0)
+    tool_event = next(event for event in events if event.kind == "tool")
+    rendered = transcript_entry(tool_event)
+    assert "BASH" in rendered
+    assert "id" in rendered
+    assert "uid=1000(attacker)" in rendered
+    assert "exit 0" in rendered
+    assert "FULL INTERACTION" in transcript_header(initial_snapshot(meta, started_at_s=0.0))
