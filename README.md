@@ -17,6 +17,8 @@ python -m pip install -e '.[dev]'
 python -m pytest train/tests/ -q
 ```
 
+Preview the live gym dashboard with `pip install -e '.[tui]'` then `ultron-sim demo`.
+
 Or with [uv](https://docs.astral.sh/uv/) and the committed lockfile:
 
 ```bash
@@ -40,21 +42,20 @@ Do not place guest images, traces, model weights, credentials, or checkpoints in
 - `env/` owns guest RPC, host probes, availability, snapshots, the VM pool, cloud-init profiles, and libvirt templates.
 - `harness/` defines the Pi-facing TypeScript execution and turn interfaces.
 - `eval/` defines tier-3 plans, procedural selection, InterCode integration points, and the ReAct baseline interface.
-- `cli/` owns the live simulation theater (`python -m ultron.cli demo`).
+- `cli/` owns the live gym dashboard (`ultron-sim demo`).
 - `configs/` records the locked model, host, generation, training, and evaluation parameters.
 - `scripts/` contains host checks, vLLM launchers, rollout launch, and generation training entry points.
 
-## Live theater
+## Live gym dashboard
 
-Watch attacker and defender take turns over a guest sandbox. Demo needs no GPU or Docker:
+Attacker and defender take turns over a guest sandbox. The demo needs no GPU or Docker.
 
 ```bash
 python -m pip install -e '.[dev,tui]'
-python -m ultron.cli demo
-python -m ultron.cli demo --ascii --script hold-at-turn-7
+ultron-sim demo
 ```
 
-Core install stays PyYAML-only. `--ascii` works without the `tui` extra.
+Core install stays PyYAML-only. Textual is the `tui` extra.
 
 ## Safety boundary
 

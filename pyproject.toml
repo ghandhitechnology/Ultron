@@ -15,17 +15,19 @@ dev = ["pytest>=8.0"]
 parquet = ["pyarrow>=15.0"]
 tui = ["textual>=0.80"]
 
+[project.scripts]
+ultron-sim = "ultron.cli.main:main"
+
 [tool.setuptools]
 package-dir = { ultron = "." }
 packages = [
   "ultron",
   "ultron.train",
   "ultron.env",
+  "ultron.cli",
   "ultron.eval",
   "ultron.eval.procedural",
   "ultron.eval.procedural.logic",
-  "ultron.cli",
-  "ultron.cli.tui",
 ]
 
 [tool.pytest.ini_options]
