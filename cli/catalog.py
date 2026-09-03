@@ -29,6 +29,7 @@ class ActionId(str, Enum):
     BENCHMARKS = "benchmarks"
     PFSP = "pfsp"
     BANDPASS = "bandpass"
+    CAPABILITY = "capability"
     TESTS = "tests"
 
 
@@ -227,6 +228,13 @@ def all_actions(*, root: Path | None = None) -> tuple[ActionSpec, ...]:
             ),
         ),
         ActionSpec(
+            ActionId.CAPABILITY,
+            "Model capability",
+            ActionGroup.VERIFY,
+            "Report which family packs this host can train before kvm, docker, and nvidia-smi host gates.",
+            (),
+        ),
+        ActionSpec(
             ActionId.TESTS,
             "Run tests",
             ActionGroup.VERIFY,
@@ -420,6 +428,12 @@ def plan(
                 cwd=root,
                 title="pfsp",
                 env=family_env,
+            )
+        case ActionId.CAPABILITY:
+            return ForegroundPlan(
+                argv=(_python(), "-m", "ultron.train.capability"),
+                cwd=root,
+                title="model capability",
             )
         case ActionId.BANDPASS:
             generation = _int_value(values, "generation")
