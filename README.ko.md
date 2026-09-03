@@ -6,7 +6,7 @@
 
 기반은 `Qwen/Qwen3.5-4B`가 기본이다. LoRA는 두 장이다. 둘 다 Pi로 `bash`/`read`/`write`/`edit`를 쓰고, 그 명령은 격리된 Ubuntu 18.04.6 게스트(Docker 또는 native KVM, `guest_backend`로 선택)에서 실행된다. 공격자가 `uid 0`을 얻었는지는 게스트 보고만으로 끝내지 않는다. 호스트가 독립적인 `/proc` 검증이나 vsock RPC로 한 번 더 본다.
 
-한 잡은 `qwen-4b`(기본), `qwen-8b`, `gemma` 중 하나만 고른다. `--family`나 `ULTRON_MODEL_FAMILY`로 고른다. 기본이 아니면 가중치는 `data/families/<이름>/`에 쌓인다. 설치와 서버 부트스트랩은 [영문 README](README.md)와 [서버 가이드](docs/SERVER_GUIDE.md)를 보면 된다.
+한 잡은 `qwen-4b`(기본), `qwen-8b`, `gemma`, `gemma-abliterated` 중 하나만 고른다. `--family`나 `ULTRON_MODEL_FAMILY`로 고른다. 기본이 아니면 가중치는 `data/families/<이름>/`에 쌓인다. 설치와 서버 부트스트랩은 [영문 README](README.md)와 [서버 가이드](docs/SERVER_GUIDE.md)를 보면 된다.
 
 <p align="center">
   <img src="docs/screenshots/demo_gym.png" alt="라이브 게스트 짐. 공격자, 샌드박스, 수비자 칸과 프로세스 로그, 에피소드 진행 막대" width="920" />
@@ -58,13 +58,13 @@ flowchart LR
   <img src="docs/screenshots/console_family_dropdown.png" alt="모델 패밀리 드롭다운. Gemma와 Qwen 두 팩" width="900" />
 </p>
 
-고를 수 있는 이름은 `qwen-4b`, `qwen-8b`, `gemma` 세 개뿐이다. `ULTRON_BASE_MODEL`은 선택기가 아니다. 팩과 어긋나게 주면 잡이 죽는다.
+고를 수 있는 이름은 `qwen-4b`, `qwen-8b`, `gemma`, `gemma-abliterated`다. `ULTRON_BASE_MODEL`은 선택기가 아니다. 팩과 어긋나게 주면 잡이 죽는다.
 
 <p align="center">
   <img src="docs/screenshots/console_family_qwen8b.png" alt="qwen-8b 패밀리가 핀된 실험 콘솔" width="900" />
 </p>
 
-`qwen-8b`와 `gemma`는 `configs/families/<이름>/`을 읽고 `data/families/<이름>/`에 쓴다. 기본 `qwen-4b`는 원래대로 `configs/`와 `data/checkpoints`, `data/archives`를 쓴다. Gemma 팩은 vLLM에 `--chat-template-kwargs`를 안 붙이고, Qwen 팩은 thinking을 끈다.
+기본이 아닌 팩은 `configs/families/<이름>/`을 읽고 `data/families/<이름>/`에 쓴다. 기본 `qwen-4b`는 원래대로 `configs/`와 `data/checkpoints`, `data/archives`를 쓴다. 두 Gemma 팩은 vLLM에 `--chat-template-kwargs`를 안 붙이고, Qwen 팩은 thinking을 끈다. Gemma 4 Unified 모델은 vLLM 0.23 이상에서 실행한다.
 
 <p align="center">
   <img src="docs/screenshots/console_jobs.png" alt="tmux 잡 테이블. session, state, pid, command 열" width="900" />
@@ -248,7 +248,7 @@ SUID를 찾거나, 쓸 수 있는 경로를 찾거나, 셸이 뜨면 처음 한 
 - `harness/`: Pi 세션 연동 및 턴 교대 클록 TypeScript 코드 (`execution_env.ts`, `turn_clock.ts`, `session_factory.ts`, `models.json`).
 - `eval/`: tier-3 평가 계획 생성 및 러너 (`run_tier3.py`), 테스트 이후 아카이브 가중치 공개 벤치마크 (`benchmarks.py`, `run_benchmarks.py`), 절차적 템플릿 (`procedural/`), InterCode 연동 (`intercode/`), ReAct 베이스라인 (`react_baseline.py`).
 - `cli/`: Textual 기반 연구용 터미널 UI `ultron-sim` (`ultron-sim console`) 및 실시간 게스트 짐 시뮬레이터 `ultron-sim demo`.
-- `configs/`: 기본 모델/학습/평가 설정 및 패밀리별 설정(`configs/families/qwen-8b/`, `configs/families/gemma/`).
+- `configs/`: 기본 모델/학습/평가 설정 및 `configs/families/` 아래의 패밀리별 설정.
 - `scripts/`: 베어메탈/클라우드 부트스트랩, tmux 격리 잡 관리, vLLM 서빙, 롤아웃 워커, GRPO/DPO 학습, 세대 전체 파이프라인.
 
 실험 콘솔은 `ultron-sim`으로 실행하며, 액션 선택(`enter`), 모델 패밀리 변경(`m`), 잡 모니터링(`j`), 결과/리뷰 확인(`r`), 테스트 실행(`t`)을 지원한다.

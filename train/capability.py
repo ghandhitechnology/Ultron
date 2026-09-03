@@ -72,6 +72,16 @@ REQUIREMENTS: tuple[FamilyRequirement, ...] = (
         caution_vram_gb=48,
         notes="skip 24 GB cards; 48 GB needs a smaller guest pool",
     ),
+    FamilyRequirement(
+        name="gemma-abliterated",
+        base_model="huihui-ai/Huihui-gemma-4-12B-it-abliterated",
+        min_physical_cores=32,
+        min_ram_gb=192,
+        min_gpus=2,
+        min_vram_gb=80,
+        caution_vram_gb=48,
+        notes="requires vLLM 0.23+; skip 24 GB cards; 48 GB needs a smaller guest pool",
+    ),
 )
 
 

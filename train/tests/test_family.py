@@ -94,6 +94,7 @@ def test_unknown_name_fails() -> None:
         resolve("llama-8b", environ={})
     assert "qwen-8b" in str(exc.value)
     assert "gemma" in str(exc.value)
+    assert "gemma-abliterated" in str(exc.value)
     with pytest.raises(UnknownFamilyError):
         parse_family_name("qwen3.5-8b")
 
@@ -113,7 +114,7 @@ def test_each_pack_shares_original_key_tree() -> None:
                 assert missing == set()
 
 
-def test_three_hf_pins_agree_in_each_pack() -> None:
+def test_hf_pins_agree_in_each_pack() -> None:
     for name in FamilyName:
         pack = resolve(name, environ={})
         files = _pack_files(name)
@@ -123,20 +124,22 @@ def test_three_hf_pins_agree_in_each_pack() -> None:
         assert model_id == grpo_id == dpo_id == pack.base_model
 
 
-def test_qwen_packs_include_thinking_off_and_gemma_omits() -> None:
+def test_qwen_packs_include_thinking_off_and_gemma_packs_omit() -> None:
     qwen_4b = resolve(FamilyName.QWEN_4B, environ={})
     qwen_8b = resolve(FamilyName.QWEN_8B, environ={})
     gemma = resolve(FamilyName.GEMMA, environ={})
+    gemma_abliterated = resolve(FamilyName.GEMMA_ABLITERATED, environ={})
     for pack in (qwen_4b, qwen_8b):
         args = pack.vllm_chat_template_args()
         assert args[0] == "--chat-template-kwargs"
         assert json.loads(args[1]) == {"enable_thinking": False}
         exported = pack.export_environ()["ULTRON_VLLM_CHAT_TEMPLATE_KWARGS"]
         assert json.loads(exported) == {"enable_thinking": False}
-    assert gemma.vllm_chat_template_args() == ()
-    assert gemma.export_environ()["ULTRON_VLLM_CHAT_TEMPLATE_KWARGS"] == ""
-    assert gemma.chat_template_kwargs is None
-    assert gemma.max_model_len == 32768
+    for pack in (gemma, gemma_abliterated):
+        assert pack.vllm_chat_template_args() == ()
+        assert pack.export_environ()["ULTRON_VLLM_CHAT_TEMPLATE_KWARGS"] == ""
+        assert pack.chat_template_kwargs is None
+        assert pack.max_model_len == 32768
 
 
 def test_qwen_8b_id_and_namespaced_roots() -> None:
@@ -152,6 +155,13 @@ def test_gemma_roots_are_namespaced() -> None:
     assert pack.base_model == "google/gemma-4-12B-it"
     assert pack.checkpoint_root == ROOT / "data" / "families" / "gemma" / "checkpoints"
     assert pack.archive_root == ROOT / "data" / "families" / "gemma" / "archives"
+
+
+def test_abliterated_gemma_has_its_own_model_and_roots() -> None:
+    pack = resolve(FamilyName.GEMMA_ABLITERATED, repo_root=ROOT, environ={})
+    assert pack.base_model == "huihui-ai/Huihui-gemma-4-12B-it-abliterated"
+    assert pack.checkpoint_root == ROOT / "data" / "families" / "gemma-abliterated" / "checkpoints"
+    assert pack.archive_root == ROOT / "data" / "families" / "gemma-abliterated" / "archives"
 
 
 def test_default_artifact_roots_unchanged() -> None:

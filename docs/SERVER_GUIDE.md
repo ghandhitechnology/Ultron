@@ -334,7 +334,7 @@ Pass when all result rows and aggregate metrics exist under `data/eval/` and the
 
 ## 10. Serve the two LoRAs with vLLM
 
-Install a vLLM version compatible with the pinned Qwen model in the project environment. Cache model weights on local NVMe. After a generation, archive the serveable LoRAs:
+Install a vLLM version compatible with the pinned model in the project environment. Both Gemma 4 Unified packs require vLLM 0.23 or newer. Cache model weights on local NVMe. After a generation, archive the serveable LoRAs:
 
 ```bash
 # Default (qwen-4b)
@@ -345,6 +345,7 @@ Install a vLLM version compatible with the pinned Qwen model in the project envi
 # For other model families:
 ULTRON_MODEL_FAMILY=qwen-8b ./scripts/archive_weights.sh --generation 0
 ULTRON_MODEL_FAMILY=gemma ./scripts/archive_weights.sh --generation 0
+ULTRON_MODEL_FAMILY=gemma-abliterated ./scripts/archive_weights.sh --generation 0
 ```
 
 That copies every PEFT snapshot under the training `genN` dirs into `data/archives/genN/checkpoints/` (or `data/families/<name>/archives/genN/checkpoints/` when a family is selected), writes the last serveable adapters as `data/archives/final/` (or `data/families/<name>/archives/final/`), and writes `FINAL.sh`. `FINAL.sh` prints those paths; `FINAL.sh attacker` / `FINAL.sh defender` / `FINAL.sh checkpoints` select them. Serve scripts call `FINAL.sh` first via `scripts/resolve_adapter.sh`. For a manual generation-0 drop before the first train:

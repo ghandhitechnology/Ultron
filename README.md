@@ -16,7 +16,7 @@ This repository is research-ready scaffolding. Pure Python contracts, reward log
 
 Python unit tests, reward logic, and `ultron-sim demo` need no GPU. Isolated rollouts, vLLM, GRPO, and DPO do.
 
-Supported bases are Qwen 4B, Qwen 8B, and Gemma 12B. The checked-in default is `Qwen/Qwen3.5-4B`. Point `configs/model.yaml`, `ULTRON_BASE_MODEL`, `configs/train_grpo.yaml`, and `configs/train_dpo.yaml` at `Qwen/Qwen3-8B` or `google/gemma-4-12B-it` (or use `--family` / `ULTRON_MODEL_FAMILY`) only on a host that meets that row. Qwen 27B, 35B, and larger Qwen MoE checkpoints are not supported.
+Supported bases are Qwen 4B, Qwen 8B, Gemma 12B, and the abliterated Gemma 12B checkpoint. The checked-in default is `Qwen/Qwen3.5-4B`. Select a checked-in pack with `--family` or `ULTRON_MODEL_FAMILY` only on a host that meets its row. Qwen 27B, 35B, and larger Qwen MoE checkpoints are not supported.
 
 Figures assume two vLLM processes (attacker and defender), BF16 weights, `max_model_len` 32768, LoRA rank 64, 16 CPU-only guests at 2 vCPU / 4 GiB each, and GRPO or DPO after both servers stop. Guests never take a GPU. Pin one GPU per role. Do not overlap vLLM and FSDP.
 
@@ -25,10 +25,11 @@ Figures assume two vLLM processes (attacker and defender), BF16 weights, `max_mo
 | `Qwen/Qwen3.5-4B` (locked default) | 32 physical cores; 64 safer | 128 GB | 2× A100 80 GB, or 2× H100 80 GB. Attacker on GPU 0, defender on GPU 1 (`ULTRON_ATTACKER_GPU` / `ULTRON_DEFENDER_GPU`). |
 | `Qwen/Qwen3-8B` | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB or 2× A100 80 GB with the same one-GPU-per-role pin. 2× L40S 48 GB only if you cut guest concurrency. |
 | `google/gemma-4-12B-it` | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB preferred; 2× A100 80 GB is the fallback. Skip 24 GB cards. 48 GB cards need a smaller guest pool. |
+| `huihui-ai/Huihui-gemma-4-12B-it-abliterated` | 32 physical cores; 64 safer | 192 GB | Same as Gemma 12B. Requires vLLM 0.23 or newer for native Gemma 4 Unified support. |
 
 Every row also needs x86-64, Ubuntu 22.04 or 24.04, an NVIDIA datacenter driver, and at least 1 TB local NVMe for the base image, overlays, Hugging Face cache, traces, and checkpoints. Docker guests use `scripts/bootstrap_cloud.sh` and do not need `/dev/kvm`. Native KVM guests need `/dev/kvm` and the 32-core floor if you keep 16 VMs.
 
-`python -m ultron.train.capability` (or the console **Model capability** action) reads CPU, RAM, and `nvidia-smi` and prints which of those three packs can train here. `bootstrap_bm.sh` and `bootstrap_cloud.sh` run that check first. They only continue to kvm, docker, and the rest of the host gates if at least one family fits — or the pinned `ULTRON_MODEL_FAMILY` does.
+`python -m ultron.train.capability` (or the console **Model capability** action) reads CPU, RAM, and `nvidia-smi` and prints which of those four packs can train here. `bootstrap_bm.sh` and `bootstrap_cloud.sh` run that check first. They only continue to kvm, docker, and the rest of the host gates if at least one family fits — or the pinned `ULTRON_MODEL_FAMILY` does.
 
 ## Quick start
 
@@ -72,7 +73,7 @@ Do not place guest images, traces, model weights, credentials, or checkpoints in
 - `env/` owns guest isolation abstractions (`backend.py`), Docker guest backend (`docker_backend.py`), libvirt/KVM templates (`libvirt/`), vsock guest RPC (`guest_agent_client.py`), in-guest agent daemon (`guest-agent/`), host proc probes (`probes.py`), service TCP availability probes (`availability.py`), backing image hash verification (`snapshot.py`), VM pool quarantine management (`vm_pool.py`), and cloud-init guest environment profiles (`cloud-init/`, `profiles.yaml`).
 - `harness/` defines the Pi-facing TypeScript execution environment and turn interfaces (`execution_env.ts`), turn alternation clock (`turn_clock.ts`), agent session factory (`session_factory.ts`), model endpoints configuration (`models.json`), and JSONL event stream export (`export_jsonl.ts`).
 - `eval/` defines tier-3 evaluation plans and runner (`run_tier3.py`), post-test public benchmark scoring of archived attacker and defender weights (`benchmarks.py`, `run_benchmarks.py`, `plot.py`), procedural template generators (`procedural/`), InterCode evaluation adapters (`intercode/`), Debian 12 zero-shot build scripts (`debian12/`), and ReAct baseline scaffolding (`react_baseline.py`).
-- `configs/` records locked model (`model.yaml`), host/VM topology (`bm-gpu.yaml`), generation loops (`generation.yaml`), training algorithms (`train_grpo.yaml`, `train_dpo.yaml`), evaluation plans (`eval_tier3.yaml`, `eval_benchmarks.yaml`), and selectable model family packs (`families/qwen-8b/`, `families/gemma/`).
+- `configs/` records locked model (`model.yaml`), host/VM topology (`bm-gpu.yaml`), generation loops (`generation.yaml`), training algorithms (`train_grpo.yaml`, `train_dpo.yaml`), evaluation plans (`eval_tier3.yaml`, `eval_benchmarks.yaml`), and selectable model family packs under `families/`.
 - `scripts/` contains host environment bootstrap gates (`bootstrap_bm.sh`, `bootstrap_cloud.sh`), model-fit preflight (`lib_capability.sh`), tmux lifecycle management (`tmux_job.sh`, `lib_tmux.sh`), model family environment loader (`lib_family.sh`), vLLM role servers (`serve_vllm_attacker.sh`, `serve_vllm_defender.sh`), rollout worker (`rollout_worker.sh`), adapter resolution (`resolve_adapter.sh`), training entry points (`train_grpo.sh`, `train_dpo.sh`), full generation loop orchestrator (`run_generation.sh`), unit tests plus post-test archived-weight benchmarks (`run_tests.sh`, `run_benchmarks.sh`), and weight archiver (`archive_weights.sh`).
 - `cli/` is the experiment console (`ultron-sim` / `ultron-sim console`) and live guest-gym dashboard (`ultron-sim demo`). Built with Textual, it provides interactive job launching across actions (demo, generation, rollout, GRPO, DPO, serve, review, archive, eval, tests), real-time tmux monitoring, review report viewing, and live simulation of agent-sandbox interactions.
 - `prompts/` contains attacker and defender system instructions (`attacker_system.md`, `defender_system.md`) and per-profile research goals (`goals/profiles.yaml`).
@@ -94,7 +95,7 @@ Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](d
 
 ## Model families
 
-A job pins one base-model family. The unset family is `qwen-4b` (`Qwen/Qwen3.5-4B`), which uses the top-level `configs/` files (`configs/model.yaml`, `configs/train_grpo.yaml`, `configs/train_dpo.yaml`) and stores checkpoints and archives under `data/checkpoints` and `data/archives`. Supported alternative families are `qwen-8b` (`Qwen/Qwen3-8B`) and `gemma` (`google/gemma-4-12B-it`), which live under `configs/families/<name>/` and write outputs under `data/families/<name>/checkpoints` and `data/families/<name>/archives`.
+A job pins one base-model family. The unset family is `qwen-4b` (`Qwen/Qwen3.5-4B`), which uses the top-level `configs/` files and stores checkpoints and archives under `data/checkpoints` and `data/archives`. Alternative families are `qwen-8b` (`Qwen/Qwen3-8B`), `gemma` (`google/gemma-4-12B-it`), and `gemma-abliterated` (`huihui-ai/Huihui-gemma-4-12B-it-abliterated`). They live under `configs/families/<name>/` and write outputs under `data/families/<name>/`.
 
 <p align="center">
   <img src="docs/screenshots/console_family_gemma.png" alt="Experiment console with the Gemma family pin in the header" width="900" />
@@ -106,7 +107,7 @@ The pin in the header is the same selector you set with `--family` or `ULTRON_MO
   <img src="docs/screenshots/console_family_dropdown.png" alt="Model family dropdown listing Gemma and the two Qwen packs" width="900" />
 </p>
 
-Press `m` to jump to the selector. You get three names and only three: `qwen-4b`, `qwen-8b`, and `gemma`.
+Press `m` to jump to the selector. The available names are `qwen-4b`, `qwen-8b`, `gemma`, and `gemma-abliterated`.
 
 <p align="center">
   <img src="docs/screenshots/console_family_qwen8b.png" alt="Experiment console with the Qwen 8B family pin" width="900" />
@@ -121,9 +122,10 @@ Pick `qwen-8b` and everything writes under `data/families/qwen-8b/`. The default
 # Select family via CLI flag or environment variable
 ./scripts/run_generation.sh --family qwen-8b 0
 ULTRON_MODEL_FAMILY=gemma ./scripts/serve_vllm_attacker.sh
+ULTRON_MODEL_FAMILY=gemma-abliterated ./scripts/serve_vllm_attacker.sh
 ```
 
-`--family` and `ULTRON_MODEL_FAMILY` are the authoritative selector. `ULTRON_BASE_MODEL` is not an override: if set, it must agree with the chosen pack or the job will abort. Gemma automatically omits vLLM `--chat-template-kwargs`, while Qwen packs disable thinking (`enable_thinking: false`).
+`--family` and `ULTRON_MODEL_FAMILY` are the authoritative selector. `ULTRON_BASE_MODEL` must agree with the chosen pack when set. Both Gemma packs omit vLLM `--chat-template-kwargs`, while Qwen packs disable thinking (`enable_thinking: false`). Use vLLM 0.23 or newer for the Gemma 4 Unified architecture.
 
 The module `ultron.train.family` exports the active family configuration into environment variables (`ULTRON_MODEL_FAMILY`, `ULTRON_PACK_BASE_MODEL`, `ULTRON_MODEL_CONFIG`, `ULTRON_CHECKPOINT_ROOT`, `ULTRON_ARCHIVE_ROOT`, `ULTRON_PFSP_MANIFEST`, etc.) for seamless integration across shell scripts and Python workers.
 
@@ -146,7 +148,7 @@ The list on the left is the catalog, grouped into gym, pipeline, train, serve, r
 
 Key bindings:
 - `enter`: run the selected action
-- `m`: focus the model-family selector dropdown (`qwen-4b`, `qwen-8b`, `gemma`)
+- `m`: focus the model-family selector dropdown (`qwen-4b`, `qwen-8b`, `gemma`, `gemma-abliterated`)
 - `a`: view catalog of runnable actions
 - `j`: list running and finished tmux jobs with live log inspection
 - `r`: view generation results, metrics, and `review.md` reports
@@ -155,7 +157,7 @@ Key bindings:
 - `escape`: back / dismiss
 - `q`: quit
 
-The header selector pins `qwen-4b`, `qwen-8b`, or `gemma` for every launch. You can also pass `--family` on startup: `ultron-sim --family gemma`.
+The header selector pins one of the four families for every launch. You can also pass `--family` on startup: `ultron-sim --family gemma-abliterated`.
 
 Available console action groups:
 - **Gym**: `demo` (run simulated episodes in the live gym UI).

@@ -94,21 +94,22 @@ def test_parse_ram_and_nvidia_csv() -> None:
 
 def test_full_h100_host_runs_every_family() -> None:
     report = assess(host())
-    assert report.runnable == ("qwen-4b", "qwen-8b", "gemma")
+    assert report.runnable == ("qwen-4b", "qwen-8b", "gemma", "gemma-abliterated")
     assert all(item.fit is Fit.RUN for item in report.verdicts)
     assert report_ok(report)
     text = render(report)
-    assert "Runnable: qwen-4b, qwen-8b, gemma" in text
+    assert "Runnable: qwen-4b, qwen-8b, gemma, gemma-abliterated" in text
     assert "GPU 0" in text
 
 
-def test_l40s_is_caution_for_8b_and_gemma() -> None:
+def test_l40s_is_caution_for_8b_and_gemma_families() -> None:
     report = assess(host(gpus=(L40S, L40S_B)))
     by_name = {item.requirement.name: item for item in report.verdicts}
     assert by_name["qwen-4b"].fit is Fit.SKIP
     assert by_name["qwen-8b"].fit is Fit.CAUTION
     assert by_name["gemma"].fit is Fit.CAUTION
-    assert report.runnable == ("qwen-8b", "gemma")
+    assert by_name["gemma-abliterated"].fit is Fit.CAUTION
+    assert report.runnable == ("qwen-8b", "gemma", "gemma-abliterated")
     assert "cut guest concurrency" in "; ".join(by_name["qwen-8b"].reasons)
 
 
@@ -126,6 +127,7 @@ def test_ram_and_arch_gates() -> None:
     assert by_name["qwen-4b"].fit is Fit.RUN
     assert by_name["qwen-8b"].fit is Fit.SKIP
     assert by_name["gemma"].fit is Fit.SKIP
+    assert by_name["gemma-abliterated"].fit is Fit.SKIP
     arm = assess(host(arch="aarch64"))
     assert arm.runnable == ()
     assert "not x86-64" in arm.verdicts[0].reasons[0]
@@ -154,7 +156,7 @@ def test_json_payload_and_unknown_family(monkeypatch: pytest.MonkeyPatch, capsys
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert payload["selected"] == "qwen-8b"
-    assert payload["runnable"] == ["qwen-4b", "qwen-8b", "gemma"]
+    assert payload["runnable"] == ["qwen-4b", "qwen-8b", "gemma", "gemma-abliterated"]
     with pytest.raises(CapabilityError, match="unknown model family"):
         parse_family_name("llama-8b")
 

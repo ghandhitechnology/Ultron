@@ -23,6 +23,7 @@ class FamilyName(str, Enum):
     QWEN_4B = "qwen-4b"
     QWEN_8B = "qwen-8b"
     GEMMA = "gemma"
+    GEMMA_ABLITERATED = "gemma-abliterated"
 
 
 class FamilyError(ValueError):
@@ -30,7 +31,7 @@ class FamilyError(ValueError):
 
 
 class UnknownFamilyError(FamilyError):
-    """Name is not one of the three closed options."""
+    """Name is not one of the closed options."""
 
 
 class InconsistentFamilyPackError(FamilyError):
@@ -230,6 +231,18 @@ def _layout(name: FamilyName) -> _PackLayout:
                 grpo_dir=Path("configs/families/gemma"),
                 grpo_name="train_grpo",
                 dpo_config=Path("configs/families/gemma/train_dpo.yaml"),
+                checkpoint_root=checkpoints,
+                archive_root=archives,
+                pfsp_manifest=checkpoints / "pfsp_pool.json",
+            )
+        case FamilyName.GEMMA_ABLITERATED:
+            checkpoints = Path("data/families/gemma-abliterated/checkpoints")
+            archives = Path("data/families/gemma-abliterated/archives")
+            return _PackLayout(
+                model_config=Path("configs/families/gemma-abliterated/model.yaml"),
+                grpo_dir=Path("configs/families/gemma-abliterated"),
+                grpo_name="train_grpo",
+                dpo_config=Path("configs/families/gemma-abliterated/train_dpo.yaml"),
                 checkpoint_root=checkpoints,
                 archive_root=archives,
                 pfsp_manifest=checkpoints / "pfsp_pool.json",
