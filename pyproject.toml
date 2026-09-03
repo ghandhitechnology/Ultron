@@ -13,6 +13,7 @@ dependencies = ["PyYAML>=6.0"]
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 parquet = ["pyarrow>=15.0"]
+tui = ["textual>=0.80"]
 
 [tool.setuptools]
 package-dir = { ultron = "." }
@@ -23,8 +24,10 @@ packages = [
   "ultron.eval",
   "ultron.eval.procedural",
   "ultron.eval.procedural.logic",
+  "ultron.cli",
+  "ultron.cli.tui",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["train/tests", "env/tests"]
+testpaths = ["train/tests", "env/tests", "cli/tests"]
 addopts = "-ra"
