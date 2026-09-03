@@ -71,6 +71,15 @@ Screen {
     margin-top: 1;
 }
 
+.field-label:hover {
+    color: #89b4fa;
+    text-style: underline;
+}
+
+#header-title:hover, #header-title:focus {
+    color: #89b4fa;
+}
+
 Input {
     background: #11111b;
     color: #cdd6f4;
@@ -101,10 +110,36 @@ Input {
     background: #181825;
 }
 
-#status {
+#help {
+    height: 1;
+    background: #313244;
+    overflow: hidden;
+}
+
+#help-status {
+    width: 1fr;
     height: 1;
     padding: 0 1;
-    background: #313244;
+    color: #a6adc8;
+    content-align: left middle;
+}
+
+#help-keys {
+    width: auto;
+    height: 1;
+    align: right middle;
+}
+
+.shortcut {
+    width: auto;
+    height: 1;
+    padding: 0 1;
     color: #cdd6f4;
+    background: #45475a;
     text-style: bold;
+}
+
+.shortcut:hover {
+    color: #1e1e2e;
+    background: #89b4fa;
 }

@@ -46,7 +46,7 @@ flowchart LR
 
 왼쪽이 카탈로그다. gym, pipeline, train, serve, results, verify 순으로 묶여 있다. 액션을 고르면 오른쪽에 그 액션과 필드가 뜬다. Full generation 하나로 롤아웃, 리뷰, GRPO, 조건이 되면 DPO, 아카이브, PFSP, eval까지 한 줄로 건다. `enter`를 치면 돈다.
 
-키는 몇 개면 된다. `m`은 모델 패밀리, `j`는 tmux 잡, `r`은 세대 결과, `t`는 테스트, `s`는 잡 중지, `q`는 종료다. 콘솔을 열기 전에 핀을 박고 싶으면 `ultron-sim --family gemma`로 시작한다.
+키는 몇 개면 된다. `m`은 모델 패밀리, `j`는 tmux 잡, `r`은 세대 결과, `t`는 테스트, `s`는 잡 중지, `q`는 종료다. 하단 도움말이 지금 쓸 수 있는 동작만 보여 주고, 포커스와 입력에 따라 바뀐다. 칩을 누르거나 목록·필드·표를 클릭해도 된다. 콘솔을 열기 전에 핀을 박고 싶으면 `ultron-sim --family gemma`로 시작한다.
 
 <p align="center">
   <img src="docs/screenshots/console_family_gemma.png" alt="헤더에 gemma 패밀리가 핀된 실험 콘솔" width="900" />
