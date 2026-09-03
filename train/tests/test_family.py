@@ -53,7 +53,7 @@ def _load(path: Path) -> dict[str, Any]:
 
 
 def _pack_files(name: FamilyName) -> dict[str, Path]:
-    if name is FamilyName.QWEN_4B:
+    if name is FamilyName.QWEN_27B:
         return dict(ORIGINAL)
     folder = ROOT / "configs" / "families" / name.value
     return {
@@ -63,19 +63,29 @@ def _pack_files(name: FamilyName) -> dict[str, Path]:
     }
 
 
-def test_default_is_qwen_4b_with_historical_roots() -> None:
+def test_default_is_qwen_27b_with_historical_roots() -> None:
     pack = resolve(environ={})
-    assert pack.name is FamilyName.QWEN_4B
-    assert pack.base_model == "Qwen/Qwen3.5-4B"
+    assert pack.name is FamilyName.QWEN_27B
+    assert pack.base_model == "orcarouter/Qwen3.8-27B-Uncensored-FP8"
     assert pack.model_config == ORIGINAL["model"]
     assert pack.checkpoint_root == ROOT / "data" / "checkpoints"
     assert pack.archive_root == ROOT / "data" / "archives"
     assert pack.pfsp_manifest == ROOT / "data" / "checkpoints" / "pfsp_pool.json"
 
 
+def test_root_slot_belongs_to_the_default_family() -> None:
+    default = resolve(environ={})
+    assert default.name is FamilyName.QWEN_27B
+    assert default.model_config == ORIGINAL["model"]
+    others = [resolve(name, environ={}) for name in FamilyName if name is not default.name]
+    assert all(pack.model_config != default.model_config for pack in others)
+    assert all(pack.checkpoint_root != default.checkpoint_root for pack in others)
+    assert all(pack.archive_root != default.archive_root for pack in others)
+
+
 def test_empty_or_whitespace_env_is_unset() -> None:
-    assert resolve(environ={"ULTRON_MODEL_FAMILY": ""}).name is FamilyName.QWEN_4B
-    assert resolve(environ={"ULTRON_MODEL_FAMILY": "  \n"}).name is FamilyName.QWEN_4B
+    assert resolve(environ={"ULTRON_MODEL_FAMILY": ""}).name is FamilyName.QWEN_27B
+    assert resolve(environ={"ULTRON_MODEL_FAMILY": "  \n"}).name is FamilyName.QWEN_27B
 
 
 def test_env_selects_family() -> None:
@@ -92,8 +102,7 @@ def test_explicit_name_beats_env() -> None:
 def test_unknown_name_fails() -> None:
     with pytest.raises(UnknownFamilyError, match="qwen-4b") as exc:
         resolve("llama-8b", environ={})
-    assert "qwen-8b" in str(exc.value)
-    assert "gemma" in str(exc.value)
+    assert str(exc.value).endswith("expected qwen-27b, qwen-4b, qwen-8b, or gemma")
     with pytest.raises(UnknownFamilyError):
         parse_family_name("qwen3.5-8b")
 
@@ -124,10 +133,11 @@ def test_three_hf_pins_agree_in_each_pack() -> None:
 
 
 def test_qwen_packs_include_thinking_off_and_gemma_omits() -> None:
+    qwen_27b = resolve(FamilyName.QWEN_27B, environ={})
     qwen_4b = resolve(FamilyName.QWEN_4B, environ={})
     qwen_8b = resolve(FamilyName.QWEN_8B, environ={})
     gemma = resolve(FamilyName.GEMMA, environ={})
-    for pack in (qwen_4b, qwen_8b):
+    for pack in (qwen_27b, qwen_4b, qwen_8b):
         args = pack.vllm_chat_template_args()
         assert args[0] == "--chat-template-kwargs"
         assert json.loads(args[1]) == {"enable_thinking": False}
@@ -137,6 +147,15 @@ def test_qwen_packs_include_thinking_off_and_gemma_omits() -> None:
     assert gemma.export_environ()["ULTRON_VLLM_CHAT_TEMPLATE_KWARGS"] == ""
     assert gemma.chat_template_kwargs is None
     assert gemma.max_model_len == 32768
+
+
+def test_qwen_4b_is_namespaced_and_keeps_its_id() -> None:
+    pack = resolve("qwen-4b", repo_root=ROOT, environ={})
+    assert pack.base_model == "Qwen/Qwen3.5-4B"
+    assert pack.model_config == ROOT / "configs" / "families" / "qwen-4b" / "model.yaml"
+    assert pack.checkpoint_root == ROOT / "data" / "families" / "qwen-4b" / "checkpoints"
+    assert pack.archive_root == ROOT / "data" / "families" / "qwen-4b" / "archives"
+    assert pack.pfsp_manifest == ROOT / "data" / "families" / "qwen-4b" / "checkpoints" / "pfsp_pool.json"
 
 
 def test_qwen_8b_id_and_namespaced_roots() -> None:
@@ -177,8 +196,8 @@ def test_base_model_override_match_is_ok() -> None:
 def test_export_environ_keys_and_cli() -> None:
     pack = resolve(environ={})
     exported = pack.export_environ()
-    assert exported["ULTRON_MODEL_FAMILY"] == "qwen-4b"
-    assert exported["ULTRON_PACK_BASE_MODEL"] == "Qwen/Qwen3.5-4B"
+    assert exported["ULTRON_MODEL_FAMILY"] == "qwen-27b"
+    assert exported["ULTRON_PACK_BASE_MODEL"] == "orcarouter/Qwen3.8-27B-Uncensored-FP8"
     assert exported["ULTRON_GRPO_CONFIG_NAME"] == "train_grpo"
     assert exported["ULTRON_VLLM_MAX_MODEL_LEN"] == "32768"
     assert set(exported) == {
@@ -209,8 +228,8 @@ def test_export_environ_keys_and_cli() -> None:
         env=env,
     )
     assert result.returncode == 0, result.stderr
-    assert "declare -x ULTRON_MODEL_FAMILY=qwen-4b" in result.stdout
-    assert "declare -x ULTRON_PACK_BASE_MODEL=Qwen/Qwen3.5-4B" in result.stdout
+    assert "declare -x ULTRON_MODEL_FAMILY=qwen-27b" in result.stdout
+    assert "declare -x ULTRON_PACK_BASE_MODEL=orcarouter/Qwen3.8-27B-Uncensored-FP8" in result.stdout
 
 
 def test_lib_family_exports_survive_the_function() -> None:
@@ -230,8 +249,8 @@ def test_lib_family_exports_survive_the_function() -> None:
     )
     assert result.returncode == 0, result.stderr
     family, base, checkpoints = result.stdout.splitlines()
-    assert family == "qwen-4b"
-    assert base == "Qwen/Qwen3.5-4B"
+    assert family == "qwen-27b"
+    assert base == "orcarouter/Qwen3.8-27B-Uncensored-FP8"
     assert checkpoints.endswith("/data/checkpoints")
 
 
@@ -245,6 +264,9 @@ def test_lib_family_can_switch_and_rejects_unknown() -> None:
     export ULTRON_MODEL_FAMILY=gemma
     ultron_load_family
     printf '%s %s\\n' "${ULTRON_MODEL_FAMILY}" "${ULTRON_PACK_BASE_MODEL}"
+    export ULTRON_MODEL_FAMILY=qwen-4b
+    ultron_load_family
+    printf '%s %s %s\\n' "${ULTRON_MODEL_FAMILY}" "${ULTRON_PACK_BASE_MODEL}" "${ULTRON_CHECKPOINT_ROOT}"
     export ULTRON_MODEL_FAMILY=llama-8b
     if ultron_load_family; then
       echo load-should-fail
@@ -263,12 +285,14 @@ def test_lib_family_can_switch_and_rejects_unknown() -> None:
     lines = result.stdout.splitlines()
     assert lines[0] == "qwen-8b Qwen/Qwen3-8B"
     assert lines[1] == "gemma google/gemma-4-12B-it"
+    assert lines[2].startswith("qwen-4b Qwen/Qwen3.5-4B ")
+    assert lines[2].endswith("/data/families/qwen-4b/checkpoints")
     assert "unknown model family" in result.stderr
 
 
 def test_load_base_model_fallback_matches_default_pack(tmp_path: Path) -> None:
     missing = tmp_path / "missing.yaml"
-    assert load_base_model(missing) == "Qwen/Qwen3.5-4B"
+    assert load_base_model(missing) == "orcarouter/Qwen3.8-27B-Uncensored-FP8"
     assert load_base_model(missing) == resolve(environ={}).base_model
     assert load_base_model(missing) == _load(ORIGINAL["model"])["base_model"]
 
@@ -284,7 +308,7 @@ def test_context_budget_must_fit_window(tmp_path: Path) -> None:
     (configs / "train_grpo.yaml").write_text(yaml.safe_dump(grpo))
     (configs / "train_dpo.yaml").write_text(yaml.safe_dump(dpo))
     with pytest.raises(InconsistentFamilyPackError, match="max_model_len"):
-        resolve("qwen-4b", repo_root=tmp_path, environ={})
+        resolve("qwen-27b", repo_root=tmp_path, environ={})
 
 
 def test_shipped_packs_fit_context_window() -> None:

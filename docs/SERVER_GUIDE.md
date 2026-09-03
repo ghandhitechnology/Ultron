@@ -10,7 +10,7 @@ Use a single-tenant x86-64 server with:
 
 - Ubuntu 22.04 LTS or 24.04 LTS on the host.
 - Native KVM exposed as `/dev/kvm`. Nested virtualization is unsupported.
-- At least two NVIDIA GPUs with 80 GB VRAM each. H100 80 GB and A100 80 GB are the expected baseline.
+- At least two NVIDIA GPUs with 80 GB VRAM each. H100 80 GB and A100 80 GB are the expected baseline. The default `qwen-27b` FP8 pack targets 2× H100 80 GB.
 - At least 32 physical CPU cores for 16 guests at 2 vCPU each, plus cores for the host and model workers. 64 or more physical cores is safer.
 - At least 128 GB host RAM. The guest allocation alone is 64 GB.
 - Fast local NVMe with room for the base image, 16 overlays, model cache, traces, and checkpoints. Budget at least 1 TB.
@@ -334,15 +334,16 @@ Pass when all result rows and aggregate metrics exist under `data/eval/` and the
 
 ## 10. Serve the two LoRAs with vLLM
 
-Install a vLLM version compatible with the pinned Qwen model in the project environment. Cache model weights on local NVMe. After a generation, archive the serveable LoRAs:
+Install a vLLM version compatible with the pinned Qwen model in the project environment. Cache model weights on local NVMe. The default pack `orcarouter/Qwen3.8-27B-Uncensored-FP8` is a gated Hub repo, so export `HF_TOKEN` before the first download. The chimingw GGUF release mirrors source revision `21411e351948ec029617fa3c9833adcb2ad25da9`. Pin that revision if you need that snapshot rather than current `orcarouter` HEAD. After a generation, archive the serveable LoRAs:
 
 ```bash
-# Default (qwen-4b)
+# Default (qwen-27b)
 ./scripts/archive_weights.sh
 # or one generation:
 ./scripts/archive_weights.sh --generation 0
 
 # For other model families:
+ULTRON_MODEL_FAMILY=qwen-4b ./scripts/archive_weights.sh --generation 0
 ULTRON_MODEL_FAMILY=qwen-8b ./scripts/archive_weights.sh --generation 0
 ULTRON_MODEL_FAMILY=gemma ./scripts/archive_weights.sh --generation 0
 ```
@@ -352,6 +353,12 @@ That copies every PEFT snapshot under the training `genN` dirs into `data/archiv
 ```text
 data/archives/final/attacker_lora
 data/archives/final/defender_lora
+```
+
+`data/checkpoints` and `data/archives` belong to the default family. A host that trained `qwen-4b` while it was the default still has 4B LoRAs there, and `qwen-4b` now reads and writes `data/families/qwen-4b/`. Move them once before the first `qwen-27b` job so `resolve_adapter.sh` never serves a 4B adapter on the 27B base:
+
+```bash
+mkdir -p data/families/qwen-4b && mv data/checkpoints data/families/qwen-4b/checkpoints && mv data/archives data/families/qwen-4b/archives
 ```
 
 Start each server in its own tmux session. The launchers wrap themselves so the process survives SSH disconnects. On a TTY they attach; detach with `Ctrl-b d`. Without a TTY they start detached:
@@ -379,7 +386,7 @@ curl -fsS http://127.0.0.1:8001/v1/models | jq
 curl -fsS http://127.0.0.1:8002/v1/models | jq
 ```
 
-Send one structured canary request to each endpoint and verify the selected model IDs are `attacker-lora` and `defender-lora`. The launchers pass `enable_thinking=false` through chat-template kwargs. Confirm your pinned vLLM revision honors that argument before M5. Families are a separate option (`ULTRON_MODEL_FAMILY` or `--family` on generation and train scripts). The default 4B job still passes thinking-off. Gemma omits that flag.
+Send one structured canary request to each endpoint and verify the selected model IDs are `attacker-lora` and `defender-lora`. The launchers pass `enable_thinking=false` through chat-template kwargs. Confirm your pinned vLLM revision honors that argument before M5. Families are a separate option (`ULTRON_MODEL_FAMILY` or `--family` on generation and train scripts). The default 27B job still passes thinking-off. Gemma omits that flag.
 
 Stop both vLLM sessions before training:
 
@@ -420,11 +427,12 @@ The DPO command must accept:
 Run one generation. The script starts session `ultron-gen-0` and keeps running if the SSH session dies:
 
 ```bash
-# Default (qwen-4b)
+# Default (qwen-27b)
 ./scripts/run_generation.sh 0
 ./scripts/tmux_job.sh attach ultron-gen-0
 
 # Or with an explicit model family:
+./scripts/run_generation.sh --family qwen-4b 0
 ./scripts/run_generation.sh --family qwen-8b 0
 ./scripts/run_generation.sh --family gemma 0
 ```
@@ -447,7 +455,7 @@ After rollout, and again after archive, PFSP, and eval, the job writes `review.m
 Re-run the same command yourself after a job:
 
 ```bash
-# Default (qwen-4b)
+# Default (qwen-27b)
 python -m ultron.train.review data/traces/gen0 --phase complete --generation 0 \
   --eval-dir data/eval --archive-dir data/archives --pfsp data/checkpoints/pfsp_pool.json
 
@@ -613,7 +621,7 @@ Local unit tests verify pure Python contracts and policy logic. They do not veri
 - Native KVM or libvirt behavior on this machine.
 - The Ubuntu 18.04 image provenance or frozen snapshot hash.
 - Pi's runtime API at the submodule commit you select.
-- vLLM compatibility with Qwen3.5 and the thinking-off flag.
+- vLLM compatibility with the pinned Qwen checkpoints, FP8 weights, and the thinking-off flag.
 - veRL GRPO or the chosen DPO launcher's version-specific config.
 - GPU memory fit, throughput, convergence, or tier-3 research results.
 

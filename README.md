@@ -16,13 +16,14 @@ This repository is research-ready scaffolding. Pure Python contracts, reward log
 
 Python unit tests, reward logic, and `ultron-sim demo` need no GPU. Isolated rollouts, vLLM, GRPO, and DPO do.
 
-Supported bases are Qwen 4B, Qwen 8B, and Gemma 12B. The checked-in default is `Qwen/Qwen3.5-4B`. Point `configs/model.yaml`, `ULTRON_BASE_MODEL`, `configs/train_grpo.yaml`, and `configs/train_dpo.yaml` at `Qwen/Qwen3-8B` or `google/gemma-4-12B-it` (or use `--family` / `ULTRON_MODEL_FAMILY`) only on a host that meets that row. Qwen 27B, 35B, and larger Qwen MoE checkpoints are not supported.
+Supported bases are Qwen 27B, Qwen 4B, Qwen 8B, and Gemma 12B. The checked-in default is `orcarouter/Qwen3.8-27B-Uncensored-FP8`, the trainable safetensors sibling of `chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-GGUF`. The GGUF repo is inference-only and is not a pack id. The default Hub repo is gated, so export `HF_TOKEN` before the first download. Select `qwen-4b`, `qwen-8b`, or `gemma` with `--family` / `ULTRON_MODEL_FAMILY` only on a host that meets that row. Qwen 35B and larger Qwen MoE checkpoints are not supported.
 
-Figures assume two vLLM processes (attacker and defender), BF16 weights, `max_model_len` 32768, LoRA rank 64, 16 CPU-only guests at 2 vCPU / 4 GiB each, and GRPO or DPO after both servers stop. Guests never take a GPU. Pin one GPU per role. Do not overlap vLLM and FSDP.
+Figures assume two vLLM processes (attacker and defender), BF16 weights (block-FP8 for the default 27B), `max_model_len` 32768, LoRA rank 64, 16 CPU-only guests at 2 vCPU / 4 GiB each, and GRPO or DPO after both servers stop. Guests never take a GPU. Pin one GPU per role. Do not overlap vLLM and FSDP.
 
 | Variant | CPU | Host RAM | Recommended GPU setup |
 | --- | --- | --- | --- |
-| `Qwen/Qwen3.5-4B` (locked default) | 32 physical cores; 64 safer | 128 GB | 2× A100 80 GB, or 2× H100 80 GB. Attacker on GPU 0, defender on GPU 1 (`ULTRON_ATTACKER_GPU` / `ULTRON_DEFENDER_GPU`). |
+| `orcarouter/Qwen3.8-27B-Uncensored-FP8` (locked default, `qwen-27b`) | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB. About 31 GB of FP8 weights per vLLM process, tensor parallel 1. Attacker on GPU 0, defender on GPU 1 (`ULTRON_ATTACKER_GPU` / `ULTRON_DEFENDER_GPU`). |
+| `Qwen/Qwen3.5-4B` (`qwen-4b`) | 32 physical cores; 64 safer | 128 GB | 2× A100 80 GB, or 2× H100 80 GB, with the same one-GPU-per-role pin. |
 | `Qwen/Qwen3-8B` | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB or 2× A100 80 GB with the same one-GPU-per-role pin. 2× L40S 48 GB only if you cut guest concurrency. |
 | `google/gemma-4-12B-it` | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB preferred; 2× A100 80 GB is the fallback. Skip 24 GB cards. 48 GB cards need a smaller guest pool. |
 
@@ -70,7 +71,7 @@ Do not place guest images, traces, model weights, credentials, or checkpoints in
 - `env/` owns guest isolation abstractions (`backend.py`), Docker guest backend (`docker_backend.py`), libvirt/KVM templates (`libvirt/`), vsock guest RPC (`guest_agent_client.py`), in-guest agent daemon (`guest-agent/`), host proc probes (`probes.py`), service TCP availability probes (`availability.py`), backing image hash verification (`snapshot.py`), VM pool quarantine management (`vm_pool.py`), and cloud-init guest environment profiles (`cloud-init/`, `profiles.yaml`).
 - `harness/` defines the Pi-facing TypeScript execution environment and turn interfaces (`execution_env.ts`), turn alternation clock (`turn_clock.ts`), agent session factory (`session_factory.ts`), model endpoints configuration (`models.json`), and JSONL event stream export (`export_jsonl.ts`).
 - `eval/` defines tier-3 evaluation plans and runner (`run_tier3.py`), procedural template generators (`procedural/`), InterCode evaluation adapters (`intercode/`), Debian 12 zero-shot build scripts (`debian12/`), and ReAct baseline scaffolding (`react_baseline.py`).
-- `configs/` records locked model (`model.yaml`), host/VM topology (`bm-gpu.yaml`), generation loops (`generation.yaml`), training algorithms (`train_grpo.yaml`, `train_dpo.yaml`), evaluation plans (`eval_tier3.yaml`), and selectable model family packs (`families/qwen-8b/`, `families/gemma/`).
+- `configs/` records locked model (`model.yaml`), host/VM topology (`bm-gpu.yaml`), generation loops (`generation.yaml`), training algorithms (`train_grpo.yaml`, `train_dpo.yaml`), evaluation plans (`eval_tier3.yaml`), and selectable model family packs (`families/qwen-4b/`, `families/qwen-8b/`, `families/gemma/`).
 - `scripts/` contains host environment bootstrap gates (`bootstrap_bm.sh`, `bootstrap_cloud.sh`), tmux lifecycle management (`tmux_job.sh`, `lib_tmux.sh`), model family environment loader (`lib_family.sh`), vLLM role servers (`serve_vllm_attacker.sh`, `serve_vllm_defender.sh`), rollout worker (`rollout_worker.sh`), adapter resolution (`resolve_adapter.sh`), training entry points (`train_grpo.sh`, `train_dpo.sh`), full generation loop orchestrator (`run_generation.sh`), and weight archiver (`archive_weights.sh`).
 - `cli/` is the experiment console (`ultron-sim` / `ultron-sim console`) and live guest-gym dashboard (`ultron-sim demo`). Built with Textual, it provides interactive job launching across actions (demo, generation, rollout, GRPO, DPO, serve, review, archive, eval, tests), real-time tmux monitoring, review report viewing, and live simulation of agent-sandbox interactions.
 - `prompts/` contains attacker and defender system instructions (`attacker_system.md`, `defender_system.md`) and per-profile research goals (`goals/profiles.yaml`).
@@ -92,7 +93,7 @@ Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](d
 
 ## Model families
 
-A job pins one base-model family. The unset family is `qwen-4b` (`Qwen/Qwen3.5-4B`), which uses the top-level `configs/` files (`configs/model.yaml`, `configs/train_grpo.yaml`, `configs/train_dpo.yaml`) and stores checkpoints and archives under `data/checkpoints` and `data/archives`. Supported alternative families are `qwen-8b` (`Qwen/Qwen3-8B`) and `gemma` (`google/gemma-4-12B-it`), which live under `configs/families/<name>/` and write outputs under `data/families/<name>/checkpoints` and `data/families/<name>/archives`.
+A job pins one base-model family. The unset family is `qwen-27b` (`orcarouter/Qwen3.8-27B-Uncensored-FP8`), which uses the top-level `configs/` files (`configs/model.yaml`, `configs/train_grpo.yaml`, `configs/train_dpo.yaml`) and stores checkpoints and archives under `data/checkpoints` and `data/archives`. The alternatives are `qwen-4b` (`Qwen/Qwen3.5-4B`), `qwen-8b` (`Qwen/Qwen3-8B`), and `gemma` (`google/gemma-4-12B-it`), which live under `configs/families/<name>/` and write outputs under `data/families/<name>/checkpoints` and `data/families/<name>/archives`.
 
 <p align="center">
   <img src="docs/screenshots/console_family_gemma.png" alt="Experiment console with the Gemma family pin in the header" width="900" />
@@ -101,22 +102,23 @@ A job pins one base-model family. The unset family is `qwen-4b` (`Qwen/Qwen3.5-4
 The pin in the header is the same selector you set with `--family` or `ULTRON_MODEL_FAMILY`. Here it reads `gemma`.
 
 <p align="center">
-  <img src="docs/screenshots/console_family_dropdown.png" alt="Model family dropdown listing Gemma and the two Qwen packs" width="900" />
+  <img src="docs/screenshots/console_family_dropdown.png" alt="Model family dropdown listing the Qwen and Gemma packs" width="900" />
 </p>
 
-Press `m` to jump to the selector. You get three names and only three: `qwen-4b`, `qwen-8b`, and `gemma`.
+Press `m` to jump to the selector. You get four names and only four: `qwen-27b`, `qwen-4b`, `qwen-8b`, and `gemma`. The capture predates the `qwen-27b` row.
 
 <p align="center">
   <img src="docs/screenshots/console_family_qwen8b.png" alt="Experiment console with the Qwen 8B family pin" width="900" />
 </p>
 
-Pick `qwen-8b` and everything writes under `data/families/qwen-8b/`. The default `qwen-4b` pack stays where it is, on `data/checkpoints` and `data/archives`.
+Pick `qwen-8b` and everything writes under `data/families/qwen-8b/`. The default `qwen-27b` pack stays on `data/checkpoints` and `data/archives`.
 
 ```bash
-# Default (qwen-4b)
+# Default (qwen-27b)
 ./scripts/run_generation.sh 0
 
 # Select family via CLI flag or environment variable
+./scripts/run_generation.sh --family qwen-4b 0
 ./scripts/run_generation.sh --family qwen-8b 0
 ULTRON_MODEL_FAMILY=gemma ./scripts/serve_vllm_attacker.sh
 ```
@@ -144,7 +146,7 @@ The list on the left is the catalog, grouped into gym, pipeline, train, serve, r
 
 Key bindings:
 - `enter`: run the selected action
-- `m`: focus the model-family selector dropdown (`qwen-4b`, `qwen-8b`, `gemma`)
+- `m`: focus the model-family selector dropdown (`qwen-27b`, `qwen-4b`, `qwen-8b`, `gemma`)
 - `a`: view catalog of runnable actions
 - `j`: list running and finished tmux jobs with live log inspection
 - `r`: view generation results, metrics, and `review.md` reports
@@ -153,7 +155,7 @@ Key bindings:
 - `escape`: back / dismiss
 - `q`: quit
 
-The header selector pins `qwen-4b`, `qwen-8b`, or `gemma` for every launch. You can also pass `--family` on startup: `ultron-sim --family gemma`.
+The header selector pins `qwen-27b`, `qwen-4b`, `qwen-8b`, or `gemma` for every launch. You can also pass `--family` on startup: `ultron-sim --family gemma`.
 
 Available console action groups:
 - **Gym**: `demo` (run simulated episodes in the live gym UI).

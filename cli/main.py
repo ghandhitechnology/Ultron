@@ -9,6 +9,7 @@ from ultron.cli.catalog import CatalogError, GymPlan, resolve_pack
 from ultron.cli.demo import make_demo
 from ultron.cli.model import JobMeta
 from ultron.env.backend import IsolationBackend
+from ultron.train.family import FamilyName
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -16,10 +17,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="ultron-sim",
         description="Manage Ultron generations, jobs, tests, and live guest-gym rollouts.",
     )
-    parser.add_argument(
-        "--family",
-        help="Base-model family for console launches: qwen-4b, qwen-8b, or gemma.",
-    )
+    parser.add_argument("--family", help=_family_help())
     sub = parser.add_subparsers(dest="cmd")
     demo = sub.add_parser("demo", help="Run a fake episode loop in the live TUI.")
     demo.add_argument("--episodes", type=int, default=2)
@@ -33,16 +31,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Write a Textual SVG screenshot after the demo job finishes.",
     )
     console = sub.add_parser("console", help="Experiment control TUI for jobs, tests, and results.")
-    console.add_argument(
-        "--family",
-        help="Base-model family for console launches: qwen-4b, qwen-8b, or gemma.",
-    )
+    console.add_argument("--family", help=_family_help())
     args = parser.parse_args(argv)
     if args.cmd == "demo":
         return _run_demo(args)
     if args.cmd not in {None, "console"}:
         parser.error("unknown command")
     return _run_console(family=args.family)
+
+
+def _family_help() -> str:
+    names = [item.value for item in FamilyName]
+    return f"Base-model family for console launches: {', '.join(names[:-1])}, or {names[-1]}."
 
 
 def _run_demo(args: argparse.Namespace) -> int:

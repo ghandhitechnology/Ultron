@@ -11,7 +11,7 @@ data:
   truncation: error
 actor_rollout_ref:
   model:
-    path: orcarouter/Qwen3.8-27B-Uncensored-FP8
+    path: Qwen/Qwen3.5-4B
     lora_rank: 64
     lora_alpha: 64
     enable_gradient_checkpointing: true

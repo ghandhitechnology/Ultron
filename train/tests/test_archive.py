@@ -138,4 +138,4 @@ def test_default_resolve_reads_repo_model_yaml() -> None:
     pack = resolve(environ={})
     assert pack.model_config.name == "model.yaml"
     assert pack.model_config.parent.name == "configs"
-    assert pack.base_model == "Qwen/Qwen3.5-4B"
+    assert pack.base_model == "orcarouter/Qwen3.8-27B-Uncensored-FP8"

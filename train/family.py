@@ -14,15 +14,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Final, NoReturn
 
 import yaml
 
 
 class FamilyName(str, Enum):
+    QWEN_27B = "qwen-27b"
     QWEN_4B = "qwen-4b"
     QWEN_8B = "qwen-8b"
     GEMMA = "gemma"
+
+
+_ROOT_FAMILY: Final[FamilyName] = FamilyName.QWEN_27B
 
 
 class FamilyError(ValueError):
@@ -30,7 +34,7 @@ class FamilyError(ValueError):
 
 
 class UnknownFamilyError(FamilyError):
-    """Name is not one of the three closed options."""
+    """Name is not a FamilyName member."""
 
 
 class InconsistentFamilyPackError(FamilyError):
@@ -115,7 +119,7 @@ def resolve(
 ) -> FamilyPack:
     """Select, load, and validate one family pack.
 
-    Precedence: explicit `name` > environ ULTRON_MODEL_FAMILY > qwen-4b.
+    Precedence: explicit `name` > environ ULTRON_MODEL_FAMILY > qwen-27b.
     Empty / whitespace-only env is treated as unset.
     """
     root = Path(__file__).resolve().parent.parent if repo_root is None else Path(repo_root)
@@ -192,49 +196,42 @@ def _select_name(name: FamilyName | str | None, environ: Mapping[str, str]) -> F
         return parse_family_name(name)
     raw = environ.get("ULTRON_MODEL_FAMILY")
     if raw is None or not raw.strip():
-        return FamilyName.QWEN_4B
+        return _ROOT_FAMILY
     return parse_family_name(raw)
 
 
 def _layout(name: FamilyName) -> _PackLayout:
     match name:
-        case FamilyName.QWEN_4B:
-            checkpoints = Path("data/checkpoints")
-            archives = Path("data/archives")
-            return _PackLayout(
-                model_config=Path("configs/model.yaml"),
-                grpo_dir=Path("configs"),
-                grpo_name="train_grpo",
-                dpo_config=Path("configs/train_dpo.yaml"),
-                checkpoint_root=checkpoints,
-                archive_root=archives,
-                pfsp_manifest=checkpoints / "pfsp_pool.json",
-            )
-        case FamilyName.QWEN_8B:
-            checkpoints = Path("data/families/qwen-8b/checkpoints")
-            archives = Path("data/families/qwen-8b/archives")
-            return _PackLayout(
-                model_config=Path("configs/families/qwen-8b/model.yaml"),
-                grpo_dir=Path("configs/families/qwen-8b"),
-                grpo_name="train_grpo",
-                dpo_config=Path("configs/families/qwen-8b/train_dpo.yaml"),
-                checkpoint_root=checkpoints,
-                archive_root=archives,
-                pfsp_manifest=checkpoints / "pfsp_pool.json",
-            )
-        case FamilyName.GEMMA:
-            checkpoints = Path("data/families/gemma/checkpoints")
-            archives = Path("data/families/gemma/archives")
-            return _PackLayout(
-                model_config=Path("configs/families/gemma/model.yaml"),
-                grpo_dir=Path("configs/families/gemma"),
-                grpo_name="train_grpo",
-                dpo_config=Path("configs/families/gemma/train_dpo.yaml"),
-                checkpoint_root=checkpoints,
-                archive_root=archives,
-                pfsp_manifest=checkpoints / "pfsp_pool.json",
-            )
-    raise AssertionError(f"unhandled family {name!r}")
+        case FamilyName.QWEN_27B:
+            return _root_slot()
+        case FamilyName.QWEN_4B | FamilyName.QWEN_8B | FamilyName.GEMMA:
+            return _namespaced_slot(name)
+    _assert_never(name)
+
+
+def _root_slot() -> _PackLayout:
+    return _slot(Path("configs"), Path("data"))
+
+
+def _namespaced_slot(name: FamilyName) -> _PackLayout:
+    return _slot(Path("configs/families") / name.value, Path("data/families") / name.value)
+
+
+def _slot(configs: Path, data: Path) -> _PackLayout:
+    checkpoints = data / "checkpoints"
+    return _PackLayout(
+        model_config=configs / "model.yaml",
+        grpo_dir=configs,
+        grpo_name="train_grpo",
+        dpo_config=configs / "train_dpo.yaml",
+        checkpoint_root=checkpoints,
+        archive_root=data / "archives",
+        pfsp_manifest=checkpoints / "pfsp_pool.json",
+    )
+
+
+def _assert_never(value: NoReturn) -> NoReturn:
+    raise AssertionError(f"unhandled family {value!r}")
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
