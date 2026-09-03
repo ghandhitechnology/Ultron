@@ -18,6 +18,10 @@ Screen {
     border-bottom: solid #45475a;
 }
 
+#header:hover, #header:focus {
+    color: #89b4fa;
+}
+
 #sprites {
     height: 9;
     padding: 0 1;
@@ -74,6 +78,14 @@ Screen {
     scrollbar-color: #45475a;
 }
 
+#log:hover, #log:focus {
+    border-top: solid #89b4fa;
+}
+
+#progress:hover, #progress:focus {
+    color: #89b4fa;
+}
+
 #progress {
     height: 5;
     padding: 0 1;
@@ -82,10 +94,36 @@ Screen {
     border-top: solid #45475a;
 }
 
-#status {
+#help {
+    height: 1;
+    background: #313244;
+    overflow: hidden;
+}
+
+#help-status {
+    width: 1fr;
     height: 1;
     padding: 0 1;
-    background: #313244;
+    color: #a6adc8;
+    content-align: left middle;
+}
+
+#help-keys {
+    width: auto;
+    height: 1;
+    align: right middle;
+}
+
+.shortcut {
+    width: auto;
+    height: 1;
+    padding: 0 1;
     color: #cdd6f4;
+    background: #45475a;
     text-style: bold;
+}
+
+.shortcut:hover {
+    color: #1e1e2e;
+    background: #89b4fa;
 }

@@ -144,6 +144,8 @@ ultron-sim console
 
 The list on the left is the catalog, grouped into gym, pipeline, train, serve, results, and verify. Pick an action and the right pane shows it with its fields. Full generation chains the whole loop: rollout, review, GRPO, an optional DPO step, archive, PFSP, and eval. After tests finish, the default test action scores the archived weights on public agent benchmarks and writes a line graph.
 
+The bottom help bar lists the actions that work right now. It follows the focused widget and what you are typing: catalog keys when the action list is selected, field keys when an input is focused, stop/logs when a tmux job is highlighted. Click a chip to run that action. Click the header, catalog rows, form labels, family selector, job/result tables, and logs to move around with the mouse.
+
 Key bindings:
 - `enter`: run the selected action
 - `m`: focus the model-family selector dropdown (`qwen-4b`, `qwen-8b`, `gemma`)
@@ -189,7 +191,7 @@ Foreground actions like list archives, tests, and the kill-switch check stream r
 ultron-sim demo --episodes 2 --turns-per-side 2
 ```
 
-Click a pane (or press `a` / `s` / `d` / `t`) to expand detail. The demo drives a real `EpisodeRunner` with stub guests so you can watch the layout without GPUs or VMs. In production, the same injected `restore` / `run_turn` / `final_probe` callables wrap real guest instances while keeping `EpisodeRunner.run` unchanged. The console can also launch this gym via the "Live guest gym" action.
+Click a pane, the process log, or the bottom help chips (or press `a` / `s` / `d` / `t`) to expand detail. Escape or click the expanded pane to fold it. The demo drives a real `EpisodeRunner` with stub guests so you can watch the layout without GPUs or VMs. In production, the same injected `restore` / `run_turn` / `final_probe` callables wrap real guest instances while keeping `EpisodeRunner.run` unchanged. The console can also launch this gym via the "Live guest gym" action.
 
 ## Guest isolation backends
 

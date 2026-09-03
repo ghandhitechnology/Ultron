@@ -70,7 +70,7 @@ def progress_block(snapshot: JobSnapshot) -> str:
         f"{format_bar(ep_ratio, 28)}{mean}\n"
         f"  TURNS     {_turn_display(snapshot, prog):>2} / {prog.total_turns:<2}   "
         f"{format_bar(turn_ratio, 28)}   {snapshot.phase.value}\n"
-        f"  {_outcome_strip(snapshot)}   click a/s/d/t · esc fold · q quit"
+        f"  {_outcome_strip(snapshot)}"
     )
 
 

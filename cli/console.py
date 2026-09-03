@@ -10,7 +10,7 @@ from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import DataTable, Input, Label, OptionList, RichLog, Select, Static
+from textual.widgets import DataTable, Input, OptionList, RichLog, Select, Static
 from textual.widgets.option_list import Option
 
 from ultron.cli.catalog import (
@@ -28,6 +28,8 @@ from ultron.cli.catalog import (
     resolve_pack,
     spec_for,
 )
+from ultron.cli.help import FieldLabel, HelpBar, MouseStatic
+from ultron.cli.shortcuts import ConsoleFocus, ConsoleScreen, console_shortcuts
 from ultron.cli.jobs import (
     AlreadyRunning,
     JobsError,
@@ -54,6 +56,12 @@ class View(str, Enum):
     JOBS = "jobs"
     RESULTS = "results"
     RUN = "run"
+
+
+class CatalogTitle(MouseStatic):
+    def on_click(self) -> None:
+        self.focus()
+        self.app.action_show_catalog()
 
 
 class ConsoleApp(App[GymPlan | None]):
@@ -91,7 +99,7 @@ class ConsoleApp(App[GymPlan | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="frame"):
             with Horizontal(id="header"):
-                yield Static(id="header-title")
+                yield CatalogTitle(id="header-title")
                 yield Select[str](
                     family_options(root=self.root),
                     value=self.family.value,
@@ -108,15 +116,15 @@ class ConsoleApp(App[GymPlan | None]):
                     yield Static(id="summary")
                     yield Vertical(id="form")
             with Vertical(id="jobs"):
-                yield DataTable(id="job-table")
+                yield DataTable(id="job-table", cursor_type="row")
                 yield RichLog(id="job-log", highlight=False, markup=False, wrap=True)
             with Vertical(id="results"):
-                yield DataTable(id="result-table")
+                yield DataTable(id="result-table", cursor_type="row")
                 yield RichLog(id="review-log", highlight=False, markup=False, wrap=True)
             with Vertical(id="run"):
-                yield Static(id="run-header")
+                yield MouseStatic(id="run-header")
                 yield RichLog(id="run-log", highlight=False, markup=False, wrap=True)
-            yield Static(id="status")
+            yield HelpBar(id="help")
 
     def on_mount(self) -> None:
         self._fill_actions()
@@ -211,6 +219,27 @@ class ConsoleApp(App[GymPlan | None]):
             return
         self._set_family(str(event.value))
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        self._refresh_help()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self._run_selected()
+
+    def on_descendant_focus(self, event) -> None:
+        self._refresh_help()
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        if event.data_table.id == "job-table":
+            self._preview_job_logs()
+        self._refresh_help()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.data_table.id == "job-table":
+            self._preview_job_logs()
+        elif event.data_table.id == "result-table":
+            self._fetch_selected()
+        self._refresh_help()
+
     def _fill_actions(self) -> None:
         options: list[Option] = []
         last: ActionGroup | None = None
@@ -240,7 +269,7 @@ class ConsoleApp(App[GymPlan | None]):
         for field in spec.fields:
             widget = Input(value=field.default, placeholder=field.help or field.label)
             self._inputs[field.key] = widget
-            form.mount(Label(field.label, classes="field-label"))
+            form.mount(FieldLabel(field.label, widget))
             form.mount(widget)
 
     def _field_values(self) -> dict[str, str]:
@@ -383,6 +412,7 @@ class ConsoleApp(App[GymPlan | None]):
             return
         if not sessions:
             self._set_status("no tmux jobs")
+            self._refresh_help()
             return
         for item in sessions:
             table.add_row(
@@ -393,6 +423,7 @@ class ConsoleApp(App[GymPlan | None]):
                 key=item.name,
             )
         self._set_status(f"{len(sessions)} job(s)")
+        self._refresh_help()
 
     def _refresh_results(self) -> None:
         table = self.query_one("#result-table", DataTable)
@@ -400,6 +431,7 @@ class ConsoleApp(App[GymPlan | None]):
         found = discover_generations(root=self.root, archive_dir=self.pack.archive_root)
         if not found:
             self._set_status("no generations in data/traces or data/archives")
+            self._refresh_help()
             return
         for item in found:
             verdict = "—" if item.review is None else item.review.verdict
@@ -408,6 +440,7 @@ class ConsoleApp(App[GymPlan | None]):
             review = "yes" if item.review is not None else "no"
             table.add_row(str(item.generation), verdict, episodes, asr, review, key=str(item.generation))
         self._set_status(f"{len(found)} generation(s)")
+        self._refresh_help()
 
     def _fetch_selected(self) -> None:
         table = self.query_one("#result-table", DataTable)
@@ -453,10 +486,74 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#sprites").display = view is View.CATALOG
         self.query_one("#header-title", Static).update(_header(view))
         self._paint_sprites()
-        self._set_status(_footer(view))
+        match view:
+            case View.CATALOG:
+                self._set_status("select an action")
+            case View.JOBS:
+                self._set_status("tmux jobs")
+            case View.RESULTS:
+                self._set_status("generation results")
+            case View.RUN:
+                self._set_status(self._run_title or "run output")
+            case _:
+                raise ValueError(f"unhandled view {view!r}")
+        self._refresh_help()
 
     def _set_status(self, text: str) -> None:
-        self.query_one("#status", Static).update(f"  {text}")
+        self.query_one("#help", HelpBar).set_status(f"  {text}")
+
+    def _refresh_help(self) -> None:
+        focused = self.focused
+        typing = isinstance(focused, Input)
+        filled = typing and bool(str(getattr(focused, "value", "")).strip())
+        has_job = self.view is View.JOBS and self.query_one("#job-table", DataTable).row_count > 0
+        has_generation = self.view is View.RESULTS and self.query_one("#result-table", DataTable).row_count > 0
+        self.query_one("#help", HelpBar).set_shortcuts(
+            console_shortcuts(
+                ConsoleScreen(self.view.value),
+                self._console_focus(),
+                typing=typing,
+                filled=filled,
+                has_job=has_job,
+                has_generation=has_generation,
+                can_stop=self._selected_session() is not None,
+            )
+        )
+
+    def _console_focus(self) -> ConsoleFocus:
+        widget = self.focused
+        if widget is None or (widget.id or "").startswith("help"):
+            return _focus_for_view(self.view)
+        if _ancestry_has_id(widget, "family"):
+            return ConsoleFocus.FAMILY
+        if isinstance(widget, Input):
+            return ConsoleFocus.FORM
+        wid = widget.id
+        if wid in {"actions", "header-title"}:
+            return ConsoleFocus.CATALOG
+        if wid == "job-table":
+            return ConsoleFocus.JOBS
+        if wid == "job-log":
+            return ConsoleFocus.JOB_LOG
+        if wid == "result-table":
+            return ConsoleFocus.RESULTS
+        if wid == "review-log":
+            return ConsoleFocus.REVIEW
+        if wid in {"run-log", "run-header"}:
+            return ConsoleFocus.RUN
+        return _focus_for_view(self.view)
+
+    def _preview_job_logs(self) -> None:
+        session = self._selected_session()
+        if session is None:
+            return
+        try:
+            text = read_logs(session, tail=40, root=self.root)
+        except JobsError:
+            return
+        log = self.query_one("#job-log", RichLog)
+        log.clear()
+        log.write(text)
 
 
 def run_console(*, root: Path | None = None, family: str | None = None) -> GymPlan | None:
@@ -477,15 +574,24 @@ def _header(view: View) -> str:
             raise ValueError(f"unhandled view {view!r}")
 
 
-def _footer(view: View) -> str:
+def _focus_for_view(view: View) -> ConsoleFocus:
     match view:
         case View.CATALOG:
-            return "enter run · m model · j jobs · r results · t tests · q quit"
+            return ConsoleFocus.CATALOG
         case View.JOBS:
-            return "enter logs · s stop · g refresh · esc back · q quit"
+            return ConsoleFocus.JOBS
         case View.RESULTS:
-            return "enter fetch review · g refresh · esc back · q quit"
+            return ConsoleFocus.RESULTS
         case View.RUN:
-            return "s stop · esc back · q quit"
+            return ConsoleFocus.RUN
         case _:
             raise ValueError(f"unhandled view {view!r}")
+
+
+def _ancestry_has_id(widget: object, target: str) -> bool:
+    node: object | None = widget
+    while node is not None:
+        if getattr(node, "id", None) == target:
+            return True
+        node = getattr(node, "parent", None)
+    return False

@@ -9,6 +9,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import RichLog, Static
 
+from ultron.cli.help import HelpBar, MouseStatic
 from ultron.cli.model import InvalidTransition, JobMeta, JobSnapshot, Phase, apply, initial_snapshot
 from ultron.cli.pixel import mascot_strip
 from ultron.cli.render import (
@@ -20,17 +21,32 @@ from ultron.cli.render import (
     progress_block,
     sandbox_pane,
 )
+from ultron.cli.shortcuts import GymFocus, gym_shortcuts
 
 CSS_PATH = Path(__file__).with_name("sim.tcss")
 
 
-class HotPane(Static):
+class HotPane(MouseStatic):
     def __init__(self, pane: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self.pane = pane
 
     def on_click(self) -> None:
+        self.focus()
         self.app.action_expand(self.pane)
+
+
+class HotDetail(MouseStatic):
+    def on_click(self) -> None:
+        self.focus()
+        self.app.action_collapse()
+
+
+class GymHeader(MouseStatic):
+    def on_click(self) -> None:
+        self.focus()
+        if getattr(self.app, "expanded", None):
+            self.app.action_collapse()
 
 
 class SimApp(App[None]):
@@ -68,16 +84,16 @@ class SimApp(App[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="frame"):
-            yield Static(id="header")
+            yield GymHeader(id="header")
             yield Static(id="sprites")
             with Horizontal(id="arena"):
                 yield HotPane("attacker", id="attacker")
                 yield HotPane("sandbox", id="sandbox")
                 yield HotPane("defender", id="defender")
-            yield Static(id="detail")
+            yield HotDetail(id="detail")
             yield RichLog(id="log", highlight=False, markup=False, wrap=True)
-            yield Static(id="progress")
-            yield Static(id="status")
+            yield MouseStatic(id="progress")
+            yield HelpBar(id="help")
 
     def on_mount(self) -> None:
         self.query_one("#detail", Static).display = False
@@ -88,10 +104,15 @@ class SimApp(App[None]):
     def action_expand(self, pane: str) -> None:
         self.expanded = pane
         self._paint()
+        self.query_one("#detail").focus()
 
     def action_collapse(self) -> None:
         self.expanded = None
         self._paint()
+        self.query_one("#attacker").focus()
+
+    def on_descendant_focus(self, event) -> None:
+        self._refresh_help()
 
     def _drain(self) -> None:
         drained = False
@@ -122,7 +143,8 @@ class SimApp(App[None]):
         self.query_one("#header", Static).update(header_line(snap))
         self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
         self.query_one("#progress", Static).update(progress_block(snap))
-        self.query_one("#status", Static).update(footer_line(snap, sim=self.sim))
+        self.query_one("#help", HelpBar).set_status(footer_line(snap, sim=self.sim))
+        self._refresh_help()
         arena = self.query_one("#arena", Horizontal)
         detail = self.query_one("#detail", Static)
         if self.expanded:
@@ -139,3 +161,20 @@ class SimApp(App[None]):
         while self._log_index < len(snap.log):
             log.write(snap.log[self._log_index])
             self._log_index += 1
+
+    def _refresh_help(self) -> None:
+        self.query_one("#help", HelpBar).set_shortcuts(
+            gym_shortcuts(expanded=self.expanded, focus=self._gym_focus())
+        )
+
+    def _gym_focus(self) -> GymFocus:
+        widget = self.focused
+        if widget is not None and widget.id == "log":
+            return GymFocus.LOG
+        if self.expanded:
+            return GymFocus.DETAIL
+        if widget is None or (widget.id or "").startswith("help"):
+            return GymFocus.ARENA
+        if widget.id in {"attacker", "sandbox", "defender", "header", "progress"}:
+            return GymFocus.ARENA
+        return GymFocus.ARENA

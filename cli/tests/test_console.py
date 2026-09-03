@@ -5,10 +5,11 @@ import pytest
 
 textual = pytest.importorskip("textual")
 
-from textual.widgets import OptionList, Select
+from textual.widgets import Input, OptionList, Select
 
 from ultron.cli.catalog import ActionId, TmuxPlan, all_actions, plan
 from ultron.cli.console import ConsoleApp, View
+from ultron.cli.help import HelpBar, ShortcutChip
 from ultron.train.family import FamilyName
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +92,63 @@ def test_console_family_selector_pins_launches() -> None:
             await pilot.pause()
             assert app.family is FamilyName.QWEN_8B
             assert app.pack.base_model == "Qwen/Qwen3-8B"
+
+    asyncio.run(run())
+
+
+def test_console_help_bar_follows_view_and_form_focus() -> None:
+    app = ConsoleApp(root=ROOT)
+
+    async def run() -> None:
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            bar = app.query_one("#help", HelpBar)
+            catalog = [chip.shortcut.key for chip in bar.query(ShortcutChip)]
+            assert catalog == ["enter", "m", "j", "r", "t", "q"]
+            await pilot.click(".act-j-show_jobs")
+            await pilot.pause()
+            assert app.view is View.JOBS
+            jobs = [chip.shortcut.action for chip in bar.query(ShortcutChip)]
+            assert "back" in jobs
+            assert "refresh" in jobs
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.view is View.CATALOG
+            app._select_action(ActionId.GENERATION)
+            first = next(iter(app._inputs.values()))
+            first.focus()
+            await pilot.pause()
+            form = [chip.shortcut.key for chip in bar.query(ShortcutChip)]
+            assert form[0] in {"tab", "enter"}
+            assert "j" not in form
+            assert "click" in form
+            first.value = "3"
+            await pilot.pause()
+            filled = [chip.shortcut.key for chip in bar.query(ShortcutChip)]
+            assert filled[0] == "enter"
+            assert isinstance(app.focused, Input)
+
+    asyncio.run(run())
+
+
+def test_console_mouse_focuses_family_and_actions() -> None:
+    app = ConsoleApp(root=ROOT)
+
+    async def run() -> None:
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause()
+            await pilot.click("#family")
+            await pilot.pause()
+            keys = [chip.shortcut.key for chip in app.query(ShortcutChip)]
+            assert keys[0] == "enter"
+            assert "a" in keys
+            await pilot.click("#header-title")
+            await pilot.pause()
+            assert app.view is View.CATALOG
+            listing = app.query_one("#actions", OptionList)
+            await pilot.click("#actions")
+            await pilot.pause()
+            assert listing.has_focus or app.focused is listing
 
     asyncio.run(run())
 
