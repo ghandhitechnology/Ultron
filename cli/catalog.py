@@ -26,6 +26,7 @@ class ActionId(str, Enum):
     ARCHIVE = "archive"
     ARCHIVE_LIST = "archive_list"
     EVAL = "eval"
+    BENCHMARKS = "benchmarks"
     PFSP = "pfsp"
     BANDPASS = "bandpass"
     TESTS = "tests"
@@ -126,7 +127,7 @@ def all_actions(*, root: Path | None = None) -> tuple[ActionSpec, ...]:
             ActionId.GENERATION,
             "Full generation",
             ActionGroup.PIPELINE,
-            "Rollout, review, GRPO, optional DPO, archive, PFSP, and eval.",
+            "Rollout, review, GRPO, optional DPO, archive, PFSP, eval, and public benchmarks.",
             (
                 _int("generation", "Generation", "0"),
                 _int("episodes", "Episodes", "2048", minimum_label="1"),
@@ -229,8 +230,21 @@ def all_actions(*, root: Path | None = None) -> tuple[ActionSpec, ...]:
             ActionId.TESTS,
             "Run tests",
             ActionGroup.VERIFY,
-            "Run the Python unit suites. No GPUs or guests required.",
-            (_choice("suite", "Suite", "all", ("all", "train", "env", "cli")),),
+            "Run unit tests, then score archived attacker and defender weights on public benchmarks.",
+            (_choice("suite", "Suite", "all", ("all", "train", "env", "cli", "eval")),),
+        ),
+        ActionSpec(
+            ActionId.BENCHMARKS,
+            "External benchmarks",
+            ActionGroup.VERIFY,
+            "Score archived adapters on ExploitBench, DeepSWE, and Terminal-Bench after tests.",
+            (
+                _choice("mode", "Mode", "smoke", ("smoke", "light", "full")),
+                _choice("role", "Role", "both", ("both", "attacker", "defender")),
+                _int("generation", "Generation", "0"),
+                FieldSpec("all_generations", "All generations", FieldKind.FLAG, "true"),
+                FieldSpec("execute", "Execute harnesses", FieldKind.FLAG, "false"),
+            ),
         ),
     )
 
@@ -390,6 +404,8 @@ def plan(
                 cwd=root,
                 title=f"eval {mode}",
             )
+        case ActionId.BENCHMARKS:
+            return _plan_benchmarks(values, root, pack, family_env)
         case ActionId.PFSP:
             generation = _int_value(values, "generation")
             return ForegroundPlan(
@@ -428,7 +444,7 @@ def plan(
                 title="kill-switch",
             )
         case ActionId.TESTS:
-            return _plan_tests(str(values["suite"]), root)
+            return _plan_tests(str(values["suite"]), root, pack)
         case _:
             _assert_never(action_id)
 
@@ -451,6 +467,45 @@ def _plan_demo(values: dict[str, object]) -> GymPlan:
         snapshot_sha256="demo-sha",
     )
     return GymPlan(meta=meta, delay_s=delay_s)
+
+
+def _plan_benchmarks(
+    values: dict[str, object],
+    root: Path,
+    pack: FamilyPack,
+    family_env: tuple[tuple[str, str], ...],
+) -> LaunchPlan:
+    mode = str(values["mode"])
+    role = str(values["role"])
+    generation = _int_value(values, "generation")
+    execute = bool(values["execute"])
+    all_generations = bool(values["all_generations"])
+    output = pack.archive_root.parent / "eval" / "benchmarks"
+    argv = [
+        _python(),
+        "-m",
+        "ultron.eval.run_benchmarks",
+        "--mode",
+        mode,
+        "--role",
+        role,
+        "--archive-dir",
+        str(pack.archive_root),
+        "--output",
+        str(output),
+    ]
+    if all_generations:
+        argv.append("--all")
+    else:
+        argv.extend(["--generation", str(generation)])
+    if execute:
+        argv.append("--execute")
+        return TmuxPlan(
+            session=f"ultron-bench-gen{generation}",
+            argv=tuple(argv),
+            env=family_env,
+        )
+    return ForegroundPlan(argv=tuple(argv), cwd=root, title="benchmarks", env=family_env)
 
 
 def _plan_review(values: dict[str, object], root: Path, pack: FamilyPack) -> ForegroundPlan:
@@ -479,20 +534,29 @@ def _plan_review(values: dict[str, object], root: Path, pack: FamilyPack) -> For
     return ForegroundPlan(argv=tuple(argv), cwd=root, title="review", env=_family_env(pack))
 
 
-def _plan_tests(suite: str, root: Path) -> ForegroundPlan:
+def _plan_tests(suite: str, root: Path, pack: FamilyPack) -> ForegroundPlan:
     targets = {
-        "all": ("train/tests", "env/tests", "cli/tests"),
+        "all": ("train/tests", "env/tests", "cli/tests", "eval/tests"),
         "train": ("train/tests",),
         "env": ("env/tests",),
         "cli": ("cli/tests",),
+        "eval": ("eval/tests",),
     }
     paths = targets.get(suite)
     if paths is None:
         raise CatalogError(f"unknown test suite {suite}")
+    if suite == "all":
+        return ForegroundPlan(
+            argv=(_script(root, "run_tests.sh"), "all"),
+            cwd=root,
+            title="pytest all + benchmarks",
+            env=_family_env(pack),
+        )
     return ForegroundPlan(
         argv=(_python(), "-m", "pytest", *paths, "-q"),
         cwd=root,
         title=f"pytest {suite}",
+        env=_family_env(pack),
     )
 
 

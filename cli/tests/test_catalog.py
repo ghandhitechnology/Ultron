@@ -107,3 +107,25 @@ def test_tests_plan_selects_suite_paths() -> None:
     built = plan(ActionId.TESTS, {"suite": "cli"}, root=ROOT)
     assert isinstance(built, ForegroundPlan)
     assert built.argv[-2:] == ("cli/tests", "-q")
+
+
+def test_all_tests_score_archives_after_pytest() -> None:
+    built = plan(ActionId.TESTS, {"suite": "all"}, root=ROOT)
+    assert isinstance(built, ForegroundPlan)
+    assert built.argv[0].endswith("run_tests.sh")
+    assert built.argv[-1] == "all"
+    assert ("ULTRON_MODEL_FAMILY", "qwen-4b") in built.env
+
+
+def test_benchmarks_plan_reads_archives_only() -> None:
+    built = plan(ActionId.BENCHMARKS, {}, root=ROOT)
+    assert isinstance(built, ForegroundPlan)
+    assert "--archive-dir" in built.argv
+    assert "--checkpoint-root" not in built.argv
+    assert "--all" in built.argv
+    assert any(str(part).endswith("data/archives") for part in built.argv)
+    execute = plan(ActionId.BENCHMARKS, {"execute": "true", "all_generations": "false", "generation": "3"}, root=ROOT)
+    assert isinstance(execute, TmuxPlan)
+    assert execute.session == "ultron-bench-gen3"
+    assert "--execute" in execute.argv
+    assert "--generation" in execute.argv

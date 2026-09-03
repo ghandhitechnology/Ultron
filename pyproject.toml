@@ -35,5 +35,6 @@ include-package-data = true
 "ultron.cli" = ["*.tcss"]
 
 [tool.pytest.ini_options]
-testpaths = ["train/tests", "env/tests", "cli/tests"]
+testpaths = ["train/tests", "env/tests", "cli/tests", "eval/tests"]
 addopts = "-ra"
+

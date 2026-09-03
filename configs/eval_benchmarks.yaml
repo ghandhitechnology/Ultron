@@ -1,0 +1,60 @@
+# Held-out public-agent eval after each generation. Do not train on these tasks.
+# Attackers and defenders are scored separately at every archived training step.
+
+mode_by_generation:
+  2: light
+  4: full
+default_mode: smoke
+
+roles:
+  attacker:
+    port: 8001
+    served_model: attacker-lora
+  defender:
+    port: 8002
+    served_model: defender-lora
+
+agent:
+  harbor: terminus-2
+  pier: mini-swe-agent
+
+benchmarks:
+  exploitbench:
+    title: ExploitBench
+    repo: https://github.com/exploitbench/exploitbench
+    binary: exploitbench
+    metric: score
+    smoke:
+      extra_args: ["--test"]
+    light:
+      config: benchmarks/v8-small.yaml
+      seeds: ["1"]
+    full:
+      config: benchmarks/v8.yaml
+  deep_swe:
+    title: DeepSWE
+    repo: https://github.com/datacurve-ai/deep-swe
+    binary: pier
+    metric: pass_rate
+    tasks_env: ULTRON_DEEP_SWE_ROOT
+    smoke:
+      n_tasks: 3
+      sample_seed: 0
+    light:
+      n_tasks: 10
+      sample_seed: 0
+    full:
+      n_tasks: 113
+      sample_seed: 0
+  terminal_bench:
+    title: Terminal-Bench
+    repo: https://github.com/harbor-framework/terminal-bench
+    binary: harbor
+    metric: success_rate
+    dataset: terminal-bench/terminal-bench@latest
+    smoke:
+      n_tasks: 3
+    light:
+      n_concurrent: 4
+    full:
+      n_concurrent: 8
