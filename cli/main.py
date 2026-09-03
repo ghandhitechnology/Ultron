@@ -18,7 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--family",
-        help="Base-model family for console launches: qwen-4b, qwen-8b, or gemma.",
+        help="Base-model family for console launches: qwen-4b, qwen-8b, gemma, or gemma-abliterated.",
     )
     sub = parser.add_subparsers(dest="cmd")
     demo = sub.add_parser("demo", help="Run a fake episode loop in the live TUI.")
@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     console = sub.add_parser("console", help="Experiment control TUI for jobs, tests, and results.")
     console.add_argument(
         "--family",
-        help="Base-model family for console launches: qwen-4b, qwen-8b, or gemma.",
+        help="Base-model family for console launches: qwen-4b, qwen-8b, gemma, or gemma-abliterated.",
     )
     args = parser.parse_args(argv)
     if args.cmd == "demo":

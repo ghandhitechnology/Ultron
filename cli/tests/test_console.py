@@ -91,6 +91,10 @@ def test_console_family_selector_pins_launches() -> None:
             await pilot.pause()
             assert app.family is FamilyName.QWEN_8B
             assert app.pack.base_model == "Qwen/Qwen3-8B"
+            listing.value = "gemma-abliterated"
+            await pilot.pause()
+            assert app.family is FamilyName.GEMMA_ABLITERATED
+            assert app.pack.base_model == "huihui-ai/Huihui-gemma-4-12B-it-abliterated"
 
     asyncio.run(run())
 

@@ -1,0 +1,18 @@
+family: gemma-abliterated
+base_model: huihui-ai/Huihui-gemma-4-12B-it-abliterated
+thinking:
+  enable_thinking: false
+lora:
+  rank: 64
+  alpha: 64
+  target_modules: all-linear
+  task_type: CAUSAL_LM
+adapters:
+  attacker: data/families/gemma-abliterated/archives/final/attacker_lora
+  defender: data/families/gemma-abliterated/archives/final/defender_lora
+serving:
+  attacker_url: http://127.0.0.1:8001/v1
+  defender_url: http://127.0.0.1:8002/v1
+  max_model_len: 32768
+  gpu_memory_utilization: 0.85
+  chat_template_kwargs: null
