@@ -22,11 +22,16 @@ case "${SUITE}" in
 esac
 
 echo "=== Ultron tests (${SUITE}) ==="
-python -m pytest "${paths[@]}" -q
+if [[ -x "${ROOT}/.venv/bin/python" ]]; then
+  PY="${ROOT}/.venv/bin/python"
+else
+  PY="python"
+fi
+"${PY}" -m pytest "${paths[@]}" -q
 
 echo "=== Post-test public benchmarks on archived weights ==="
 EVAL_ROOT="$(dirname "${ULTRON_ARCHIVE_ROOT}")/eval"
-python -m ultron.eval.run_benchmarks \
+"${PY}" -m ultron.eval.run_benchmarks \
   --all \
   --archive-dir "${ULTRON_ARCHIVE_ROOT}" \
   --output "${EVAL_ROOT}/benchmarks"
