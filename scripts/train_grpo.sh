@@ -22,8 +22,8 @@ if [[ "${ROLE}" != "attacker" && "${ROLE}" != "defender" ]]; then
   echo "--role must be attacker or defender" >&2
   exit 2
 fi
-if [[ -z "${GENERATION}" ]]; then
-  echo "--generation is required" >&2
+if [[ -z "${GENERATION}" || ! "${GENERATION}" =~ ^[0-9]+$ ]]; then
+  echo "--generation must be a non-negative integer" >&2
   exit 2
 fi
 if [[ ! -d third_party/verl/verl ]]; then
@@ -35,10 +35,10 @@ ultron_maybe_tmux "ultron-grpo-${ROLE}-gen${GENERATION}" "${LAUNCH_ARGS[@]}"
 
 INPUT="data/traces/gen${GENERATION}/${ROLE}.jsonl"
 OUTPUT="data/verl/gen${GENERATION}/${ROLE}.jsonl"
-python -m ultron.train.convert_verl "${INPUT}" "${OUTPUT}" --generation "${GENERATION}"
+"${ULTRON_PYTHON}" -m ultron.train.convert_verl "${INPUT}" "${OUTPUT}" --generation "${GENERATION}"
 
 PYTHONPATH="third_party/verl:${PYTHONPATH:-}" \
-python -m verl.trainer.main_ppo \
+"${ULTRON_PYTHON}" -m verl.trainer.main_ppo \
   --config-path "${ULTRON_GRPO_CONFIG_PATH}" \
   --config-name "${ULTRON_GRPO_CONFIG_NAME}" \
   "data.train_files=${OUTPUT}" \

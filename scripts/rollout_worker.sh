@@ -19,6 +19,10 @@ if [[ -z "${GENERATION}" || -z "${EPISODES}" ]]; then
   echo "Usage: $0 --generation N --episodes N" >&2
   exit 2
 fi
+if [[ ! "${GENERATION}" =~ ^[0-9]+$ || ! "${EPISODES}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Generation must be non-negative and episodes must be positive integers." >&2
+  exit 2
+fi
 if [[ -z "${ULTRON_ROLLOUT_COMMAND:-}" ]]; then
   echo "Set ULTRON_ROLLOUT_COMMAND to the M3-verified Pi/guest rollout launcher." >&2
   exit 2

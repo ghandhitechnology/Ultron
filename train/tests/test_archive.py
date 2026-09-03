@@ -10,6 +10,7 @@ from ultron.train.archive import (
     archive_generation,
     find_adapter_root,
     find_all_adapter_roots,
+    publish_final,
     select_adapter,
 )
 from ultron.train.family import resolve
@@ -132,6 +133,22 @@ def test_archive_generation_requires_both_roles(tmp_path: Path) -> None:
             pfsp_manifest=tmp_path / "pfsp.json",
             pack=False,
         )
+
+
+def test_publish_final_keeps_previous_adapters_when_staging_fails(tmp_path: Path) -> None:
+    archives = tmp_path / "archives"
+    write_adapter(archives / "final" / "attacker_lora", "stable")
+    write_adapter(archives / "gen2" / "attacker_lora", "new")
+    broken = archives / "gen2" / "defender_lora"
+    broken.mkdir(parents=True)
+    (broken / "adapter_model.safetensors").write_bytes(b"partial")
+
+    with pytest.raises(FileNotFoundError, match="adapter_config.json"):
+        publish_final(archives, 2, {"attacker": {}, "defender": {}}, 2)
+
+    assert (
+        archives / "final" / "attacker_lora" / "adapter_model.safetensors"
+    ).read_bytes() == b"stable"
 
 
 def test_default_resolve_reads_repo_model_yaml() -> None:

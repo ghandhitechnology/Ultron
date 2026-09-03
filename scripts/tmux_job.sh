@@ -19,6 +19,7 @@ Commands:
   attach <session>                  Attach to a running session
   status [session]                  Show session state
   stop <session>                    Kill a session
+  restart <session>                 Restart an exited session with the same command
   logs <session>                    Print the session log
   list                              List Ultron tmux sessions
 
@@ -55,6 +56,9 @@ validate_session() {
   if [[ ! "${session}" =~ ^[A-Za-z0-9_-]+$ ]]; then
     die "Invalid session name: ${session}"
   fi
+  if [[ "${#session}" -gt 40 ]]; then
+    die "Session name is too long (maximum 40 characters): ${session}"
+  fi
 }
 
 socket_name() {
@@ -65,10 +69,26 @@ socket_path() {
   printf '%s/%s\n' "$(sockdir)" "$(socket_name "$1")"
 }
 
+effective_tmux_tmpdir() {
+  local configured="${TMUX_TMPDIR:-/tmp}"
+  local projected="${configured}/tmux-$(id -u)/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  if [[ "${#projected}" -le 90 ]]; then
+    printf '%s\n' "${configured}"
+    return
+  fi
+  local fingerprint
+  fingerprint="$(printf '%s' "${configured}" | cksum | awk '{print $1}')"
+  printf '/tmp/ultron-tmux-%s-%s\n' "$(id -u)" "${fingerprint}"
+}
+
 tmux_cmd() {
   local session="$1"
   shift
-  tmux -L "$(socket_name "${session}")" -f "${CONF}" "$@"
+  local temporary_root
+  temporary_root="$(effective_tmux_tmpdir)"
+  mkdir -p "${temporary_root}"
+  chmod 700 "${temporary_root}"
+  TMUX_TMPDIR="${temporary_root}" tmux -L "$(socket_name "${session}")" -f "${CONF}" "$@"
 }
 
 log_path() {
@@ -76,7 +96,7 @@ log_path() {
 }
 
 sockdir() {
-  printf '%s/tmux-%s\n' "${TMUX_TMPDIR:-/tmp}" "$(id -u)"
+  printf '%s/tmux-%s\n' "$(effective_tmux_tmpdir)" "$(id -u)"
 }
 
 has_session() {
@@ -87,6 +107,13 @@ has_session() {
     return 1
   fi
   tmux_cmd "${session}" has-session -t "=${session}" 2>/dev/null
+}
+
+session_is_dead() {
+  local session="$1"
+  local dead
+  dead="$(tmux_cmd "${session}" list-panes -t "=${session}" -F '#{pane_dead}')"
+  [[ "${dead}" == "1" ]]
 }
 
 should_attach() {
@@ -108,13 +135,17 @@ start_session() {
   local log
   log="$(log_path "${session}")"
   if has_session "${session}"; then
-    echo "Session ${session} is already running." >&2
+    if session_is_dead "${session}"; then
+      echo "Session ${session} has exited. Restart it with: ${ROOT}/scripts/tmux_job.sh restart ${session}" >&2
+    else
+      echo "Session ${session} is already running." >&2
+    fi
     echo "Attach: ${ROOT}/scripts/tmux_job.sh attach ${session}" >&2
     echo "Logs:   ${log}" >&2
     return 1
   fi
   tmux_cmd "${session}" new-session -d -s "${session}" -c "${ROOT}" -- \
-    bash -c 'trap "" HUP; export ULTRON_TMUX_SESSION="$1"; exec > >(tee -a "$2") 2>&1; shift 2; printf "[%s] start %s\n" "$(date -Is)" "$*"; exec "$@"' \
+    bash -c 'trap "" HUP; export ULTRON_TMUX_SESSION="$1"; exec > >(tee -a "$2") 2>&1; shift 2; printf "[%s] start %s\n" "$(date -u "+%Y-%m-%dT%H:%M:%SZ")" "$*"; "$@"; status=$?; printf "[%s] exit %s\n" "$(date -u "+%Y-%m-%dT%H:%M:%SZ")" "$status"; exit "$status"' \
     bash "${session}" "${log}" "$@"
   echo "Started ${session}"
   echo "  attach: ${ROOT}/scripts/tmux_job.sh attach ${session}"
@@ -129,6 +160,15 @@ cmd_wrap() {
     die "Usage: tmux_job.sh wrap <session> <command> [args]"
   fi
   if has_session "${session}"; then
+    if session_is_dead "${session}"; then
+      echo "Restarting exited session ${session}."
+      tmux_cmd "${session}" kill-server
+      start_session "${session}" "$@"
+      if should_attach; then
+        exec_attach "${session}"
+      fi
+      return 0
+    fi
     echo "Session ${session} is already running." >&2
     echo "Attach: ${ROOT}/scripts/tmux_job.sh attach ${session}" >&2
     if should_attach; then
@@ -166,6 +206,23 @@ cmd_stop() {
   echo "Stopped ${session}"
 }
 
+cmd_restart() {
+  local session="${1:-}"
+  if [[ -z "${session}" ]]; then
+    die "Usage: tmux_job.sh restart <session>"
+  fi
+  validate_session "${session}"
+  require_tmux
+  if ! has_session "${session}"; then
+    die "Session not found: ${session}"
+  fi
+  if ! session_is_dead "${session}"; then
+    die "Session is still running: ${session}"
+  fi
+  tmux_cmd "${session}" respawn-pane -k -t "=${session}:0.0"
+  echo "Restarted ${session}"
+}
+
 cmd_status_one() {
   local session="$1"
   if ! has_session "${session}"; then
@@ -173,7 +230,7 @@ cmd_status_one() {
     return 1
   fi
   tmux_cmd "${session}" list-panes -t "=${session}" \
-    -F "${session}	#{pane_pid}	#{pane_dead}	#{pane_current_command}"
+    -F "${session}	#{pane_pid}	#{pane_dead}	#{pane_current_command}	#{pane_dead_status}"
 }
 
 cmd_status() {
@@ -235,6 +292,7 @@ main() {
       ;;
     status) cmd_status "${1:-}" ;;
     stop) cmd_stop "${1:-}" ;;
+    restart) cmd_restart "${1:-}" ;;
     logs) cmd_logs "${1:-}" ;;
     list) cmd_list ;;
     *)

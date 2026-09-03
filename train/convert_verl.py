@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable
 
 from .rewards import format_gate
+from .io import atomic_write_text
 from .schema_v1 import TrajectoryV1
 
 
@@ -59,11 +62,18 @@ def convert_jsonl(source: Path, destination: Path, generation: int) -> None:
             import pyarrow.parquet as pq
         except ImportError as exc:
             raise RuntimeError("install ultron[parquet] to write parquet") from exc
-        pq.write_table(pa.Table.from_pylist(records), destination)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=destination.parent, prefix=f".{destination.name}.", suffix=".tmp"
+        )
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        try:
+            pq.write_table(pa.Table.from_pylist(records), temporary)
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
         return
-    with destination.open("w") as output:
-        for record in records:
-            output.write(json.dumps(record) + "\n")
+    atomic_write_text(destination, "".join(json.dumps(record) + "\n" for record in records))
 
 
 def _main() -> None:

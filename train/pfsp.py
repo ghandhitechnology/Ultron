@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .io import atomic_write_json
 from .schema_v1 import Role
 
 
@@ -89,7 +90,7 @@ def save_pool(path: Path, generation: int, entries: list[PoolEntry]) -> None:
         "generation": generation,
         "entries": [entry.to_dict() for entry in entries],
     }
-    path.write_text(json.dumps(payload, indent=2) + "\n")
+    atomic_write_json(path, payload)
 
 
 def _main() -> None:

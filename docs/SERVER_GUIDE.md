@@ -429,6 +429,8 @@ Run one generation. The script starts session `ultron-gen-0` and keeps running i
 ./scripts/run_generation.sh --family gemma 0
 ```
 
+Each phase records durable state under `data/job-state/<family>-genN/`. Re-running the same generation skips completed phases with matching inputs and resumes at the unfinished phase. An exited wrapped session is restarted automatically when the launch command is run again. Failed phases get two attempts by default with a five-second delay; tune this with `ULTRON_STAGE_MAX_ATTEMPTS` and `ULTRON_STAGE_RETRY_DELAY_SECONDS`.
+
 The script runs these phases in order:
 
 1. Roll out 2048 episodes unless `ULTRON_EPISODES` overrides the count.
@@ -529,6 +531,8 @@ Watch CPU, memory, guest state, disks, GPUs, and job sessions via CLI or the exp
 ```bash
 ./scripts/tmux_job.sh list
 ./scripts/tmux_job.sh logs ultron-gen-0
+./scripts/tmux_job.sh status ultron-gen-0
+./scripts/tmux_job.sh restart ultron-gen-0 # restart an exited pane with its original command
 watch -n 2 nvidia-smi
 virsh -c qemu:///system list --all # for KVM backend
 docker ps                          # for Docker backend
