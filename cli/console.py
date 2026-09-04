@@ -73,12 +73,16 @@ class ConsoleApp(App[GymPlan | None]):
         Binding("g", "refresh", "refresh", show=False),
     ]
 
-    def __init__(self, *, root: Path | None = None, family: str | None = None) -> None:
+    def __init__(self, *, root: Path | None = None, family: str | None = None, initial_view: View | str | None = None, initial_session: str | None = None) -> None:
         super().__init__()
         self.root = root or repo_root()
         self.pack: FamilyPack = resolve_pack(family, root=self.root)
         self.family: FamilyName = self.pack.name
         self.view = View.CATALOG
+        if isinstance(initial_view, str):
+            initial_view = View(initial_view)
+        self._initial_view = initial_view
+        self._initial_session = initial_session
         self.selected = ActionId.GENERATION
         self._inputs: dict[str, Input] = {}
         self._run_session: str | None = None
@@ -127,6 +131,17 @@ class ConsoleApp(App[GymPlan | None]):
         self._show(View.CATALOG)
         if not self.query("#form Input"):
             self._select_action(self.selected)
+        if self._initial_session:
+            self._open_session(self._initial_session, f"job {self._initial_session}")
+            return
+        if self._initial_view is View.JOBS:
+            self._refresh_jobs()
+            self._show(View.JOBS)
+            return
+        if self._initial_view is View.RESULTS:
+            self._refresh_results()
+            self._show(View.RESULTS)
+            return
 
     def action_quit(self) -> None:
         self.exit(None)
@@ -459,8 +474,8 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#status", Static).update(f"  {text}")
 
 
-def run_console(*, root: Path | None = None, family: str | None = None) -> GymPlan | None:
-    return ConsoleApp(root=root, family=family).run()
+def run_console(*, root: Path | None = None, family: str | None = None, initial_view: View | str | None = None, initial_session: str | None = None) -> GymPlan | None:
+    return ConsoleApp(root=root, family=family, initial_view=initial_view, initial_session=initial_session).run()
 
 
 def _header(view: View) -> str:
