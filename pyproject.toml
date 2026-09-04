@@ -16,6 +16,7 @@ parquet = ["pyarrow>=15.0"]
 tui = ["textual>=0.80"]
 
 [project.scripts]
+ultron = "ultron.cli.main:main"
 ultron-sim = "ultron.cli.main:main"
 
 [tool.setuptools]

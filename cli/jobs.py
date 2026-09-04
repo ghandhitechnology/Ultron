@@ -68,6 +68,10 @@ def list_sessions(*, root: Path | None = None, env: Mapping[str, str] | None = N
     return parse_status_output(result.stdout, root=root, env=env)
 
 
+def running_sessions(*, root: Path | None = None, env: Mapping[str, str] | None = None) -> tuple[SessionInfo, ...]:
+    return tuple(item for item in list_sessions(root=root, env=env) if item.state is SessionState.RUNNING)
+
+
 def session_status(session: str, *, root: Path | None = None, env: Mapping[str, str] | None = None) -> SessionInfo:
     result = _run(["status", session], root=root, env=env)
     parsed = parse_status_output(result.stdout, root=root, env=env)
