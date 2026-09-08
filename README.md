@@ -146,6 +146,8 @@ ultron-sim console
 
 The list on the left is the catalog, grouped into gym, pipeline, train, serve, results, and verify. Pick an action and the right pane shows it with its fields. Full generation chains the whole loop: rollout, review, GRPO, an optional DPO step, archive, PFSP, and eval. After tests finish, the default test action scores the archived weights on public agent benchmarks and writes a line graph.
 
+The console renders its pixel scene at 30 FPS. Process output drains on a separate clock and in bounded batches, so a noisy job cannot monopolize keyboard input. The header link meter reports the state of the console's own event stream. `Q N` appears when output is waiting to be drawn, and the meter drops while that queue is under pressure. It does not probe the host's public network, which keeps the isolated guest boundary intact.
+
 Key bindings:
 - `enter`: run the selected action
 - `m`: focus the model-family selector dropdown (`qwen-4b`, `qwen-8b`, `gemma`, `gemma-abliterated`)

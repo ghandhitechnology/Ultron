@@ -30,6 +30,9 @@ def test_console_lists_every_catalog_action() -> None:
             body = str(sprites.content)
             assert "exploiter" in body
             assert "vision" in body
+            telemetry = str(app.query_one("#telemetry").content)
+            assert "LINK READY" in telemetry
+            assert "30 FPS" in telemetry
 
     asyncio.run(run())
 

@@ -1,11 +1,11 @@
 Screen {
-    background: #1e1e2e;
+    background: #11111b;
     color: #cdd6f4;
 }
 
 #frame {
     height: 100%;
-    border: heavy #45475a;
+    border: heavy #585b70;
     background: #1e1e2e;
 }
 
@@ -15,14 +15,14 @@ Screen {
     color: #cdd6f4;
     background: #181825;
     text-style: bold;
-    border-bottom: solid #45475a;
+    border-bottom: heavy #6c5ce7;
 }
 
 #arena {
-    height: 5;
+    height: 6;
     padding: 0 1;
     background: #181825;
-    border-bottom: solid #45475a;
+    border-bottom: heavy #45475a;
 }
 
 #attacker, #sandbox, #defender {
@@ -30,7 +30,7 @@ Screen {
     height: 1fr;
     padding: 0 1;
     border: none;
-    border-right: solid #45475a;
+    border-right: heavy #45475a;
     background: #181825;
 }
 
@@ -52,6 +52,22 @@ Screen {
 
 #attacker:hover, #sandbox:hover, #defender:hover, #attacker:focus, #sandbox:focus, #defender:focus {
     background: #24243b;
+    text-style: bold;
+}
+
+#attacker.active {
+    background: #3b2333;
+    border-bottom: heavy #f38ba8;
+}
+
+#sandbox.active {
+    background: #302649;
+    border-bottom: heavy #cba6f7;
+}
+
+#defender.active {
+    background: #213b35;
+    border-bottom: heavy #a6e3a1;
 }
 
 #detail {
@@ -67,7 +83,7 @@ Screen {
     margin: 0 1;
     padding: 0 1;
     content-align: left middle;
-    background: #302f55;
+    background: #3b3b68;
     color: #e5e7f2;
     text-style: bold;
 }
@@ -89,13 +105,13 @@ Screen {
     padding: 0 1;
     color: #a6e3a1;
     background: #181825;
-    border-top: solid #45475a;
+    border-top: heavy #45475a;
 }
 
 #status {
     height: 1;
     padding: 0 1;
-    background: #313244;
+    background: #3b3b68;
     color: #cdd6f4;
     text-style: bold;
 }

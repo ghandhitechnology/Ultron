@@ -4,6 +4,7 @@ from ultron.cli.observe import drive_job
 from ultron.cli.render import (
     arena_block,
     format_eta,
+    footer_line,
     header_line,
     progress_block,
     transcript_entry,
@@ -27,6 +28,10 @@ def test_header_includes_profile_and_eta_placeholder() -> None:
     assert "ETA --" in line
     assert format_eta(None) == "ETA --"
     assert format_eta(125) == "ETA 02:05"
+    footer = footer_line(snap, pending=9, tick=0)
+    assert "STREAM" in footer
+    assert "30 FPS" in footer
+    assert "Q 9" in footer
 
 
 def test_arena_names_both_agents_and_sandbox() -> None:

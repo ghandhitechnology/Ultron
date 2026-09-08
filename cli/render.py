@@ -18,6 +18,7 @@ from ultron.cli.model import (
     estimate_eta_s,
     progress,
 )
+from ultron.cli.pixel import telemetry_badge
 from ultron.train.schema_v1 import ReasonCode, Role
 
 BLOCK = "█"
@@ -64,11 +65,26 @@ def header_line(snapshot: JobSnapshot) -> str:
     )
 
 
-def footer_line(snapshot: JobSnapshot, *, sim: bool = True) -> str:
+def footer_line(
+    snapshot: JobSnapshot,
+    *,
+    sim: bool = True,
+    pending: int = 0,
+    tick: int | None = None,
+) -> str:
     mode = "SIM MODE" if sim else "LIVE"
+    if snapshot.phase is Phase.FAILED:
+        label, level = "link error", 1
+    elif snapshot.phase is Phase.COMPLETE:
+        label, level = "link closed", 4
+    elif pending:
+        label, level = "stream", 2 if pending > 512 else 4
+    else:
+        label, level = "link live", 4
     return (
         f"  ultron v{snapshot.meta.version}   generation {snapshot.meta.generation}   "
-        f"{snapshot.meta.profile_id}   {snapshot.meta.isolation.value}                {mode}"
+        f"{snapshot.meta.profile_id}   {snapshot.meta.isolation.value}   {mode}     "
+        f"{telemetry_badge(label, level=level, pending=pending, tick=tick)}"
     )
 
 

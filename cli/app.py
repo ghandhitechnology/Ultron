@@ -10,6 +10,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import RichLog, Static
 
 from ultron.cli.model import InvalidTransition, JobMeta, JobSnapshot, Phase, apply, initial_snapshot
+from ultron.cli.pixel import FRAME_RATE
 from ultron.cli.render import (
     attacker_pane,
     defender_pane,
@@ -23,14 +24,18 @@ from ultron.cli.render import (
 )
 
 CSS_PATH = Path(__file__).with_name("sim.tcss")
+EVENTS_PER_TICK = 256
 
 
 class HotPane(Static):
+    can_focus = True
+
     def __init__(self, pane: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self.pane = pane
 
     def on_click(self) -> None:
+        self.focus()
         self.app.action_expand(self.pane)
 
 
@@ -67,6 +72,7 @@ class SimApp(App[None]):
         self.snapshot: JobSnapshot = initial_snapshot(meta, started_at_s=0.0)
         self.expanded: str | None = None
         self._done = False
+        self._frame_tick = 0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="frame"):
@@ -84,6 +90,7 @@ class SimApp(App[None]):
     def on_mount(self) -> None:
         self.query_one("#detail", Static).display = False
         self.set_interval(0.05, self._drain)
+        self.set_interval(1 / FRAME_RATE, self._tick_animation)
         self._paint()
 
     def action_expand(self, pane: str) -> None:
@@ -110,7 +117,7 @@ class SimApp(App[None]):
     def _drain(self) -> None:
         drained = False
         log = self.query_one("#log", RichLog)
-        while True:
+        for _ in range(EVENTS_PER_TICK):
             try:
                 item = self.events.get_nowait()
             except Empty:
@@ -129,12 +136,32 @@ class SimApp(App[None]):
         if drained:
             self._paint()
 
+    def _tick_animation(self) -> None:
+        if not self.query("#status"):
+            return
+        self._frame_tick += 1
+        self.query_one("#status", Static).update(
+            footer_line(
+                self.snapshot,
+                sim=self.sim,
+                pending=self.events.qsize(),
+                tick=self._frame_tick,
+            )
+        )
+
     def _paint(self) -> None:
         snap = self.snapshot
         self.query_one("#header", Static).update(header_line(snap))
         self.query_one("#transcript-header", Static).update(transcript_header(snap))
         self.query_one("#progress", Static).update(progress_block(snap))
-        self.query_one("#status", Static).update(footer_line(snap, sim=self.sim))
+        self.query_one("#status", Static).update(
+            footer_line(
+                snap,
+                sim=self.sim,
+                pending=self.events.qsize(),
+                tick=self._frame_tick,
+            )
+        )
         arena = self.query_one("#arena", Horizontal)
         detail = self.query_one("#detail", Static)
         if self.expanded:
@@ -144,6 +171,12 @@ class SimApp(App[None]):
         else:
             arena.display = True
             detail.display = False
-            self.query_one("#attacker", HotPane).update(attacker_pane(snap))
-            self.query_one("#sandbox", HotPane).update(sandbox_pane(snap))
-            self.query_one("#defender", HotPane).update(defender_pane(snap))
+            attacker = self.query_one("#attacker", HotPane)
+            sandbox = self.query_one("#sandbox", HotPane)
+            defender = self.query_one("#defender", HotPane)
+            attacker.set_class(snap.phase is Phase.ATTACKING, "active")
+            sandbox.set_class(snap.phase in (Phase.RESTORING, Phase.PROBING), "active")
+            defender.set_class(snap.phase is Phase.DEFENDING, "active")
+            attacker.update(attacker_pane(snap))
+            sandbox.update(sandbox_pane(snap))
+            defender.update(defender_pane(snap))

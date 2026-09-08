@@ -36,7 +36,7 @@ from ultron.cli.jobs import (
     start_session,
     stop_session,
 )
-from ultron.cli.pixel import mascot_strip
+from ultron.cli.pixel import FRAME_RATE, mascot_strip, telemetry_badge
 from ultron.cli.results import (
     ResultsError,
     discover_generations,
@@ -47,6 +47,7 @@ from ultron.train.family import FamilyName, FamilyPack
 
 CSS_PATH = Path(__file__).with_name("console.tcss")
 SENTINEL = object()
+EVENTS_PER_TICK = 256
 
 
 class View(str, Enum):
@@ -92,6 +93,7 @@ class ConsoleApp(App[GymPlan | None]):
         with Vertical(id="frame"):
             with Horizontal(id="header"):
                 yield Static(id="header-title")
+                yield Static(id="telemetry")
                 yield Select[str](
                     family_options(root=self.root),
                     value=self.family.value,
@@ -122,8 +124,9 @@ class ConsoleApp(App[GymPlan | None]):
         self._fill_actions()
         self.query_one("#job-table", DataTable).add_columns("session", "state", "pid", "command")
         self.query_one("#result-table", DataTable).add_columns("gen", "verdict", "episodes", "asr", "review")
-        self.set_interval(0.2, self._tick)
-        self.set_interval(0.16, self._tick_pixels)
+        self.set_interval(0.05, self._tick)
+        self.set_interval(0.25, self._poll_run_logs)
+        self.set_interval(1 / FRAME_RATE, self._tick_pixels)
         self._show(View.CATALOG)
         if not self.query("#form Input"):
             self._select_action(self.selected)
@@ -337,18 +340,37 @@ class ConsoleApp(App[GymPlan | None]):
     def _tick(self) -> None:
         if self.view is View.RUN:
             self._drain_events()
-            self._poll_run_logs()
 
     def _tick_pixels(self) -> None:
+        if not self.query("#telemetry"):
+            return
         self._pixel_tick += 1
-        self._paint_sprites()
+        if self.view is View.CATALOG:
+            self._paint_sprites()
+        self._paint_telemetry()
 
     def _paint_sprites(self) -> None:
+        if not self.query("#sprites"):
+            return
         self.query_one("#sprites", Static).update(mascot_strip(self._pixel_tick))
+
+    def _paint_telemetry(self) -> None:
+        if not self.query("#telemetry"):
+            return
+        pending = self._events.qsize() if self.view is View.RUN else 0
+        if self.view is View.RUN and not self._done:
+            label = "stream"
+            level = 2 if pending > EVENTS_PER_TICK * 2 else 4
+        else:
+            label = "link ready"
+            level = 4
+        self.query_one("#telemetry", Static).update(
+            telemetry_badge(label, level=level, pending=pending, tick=self._pixel_tick)
+        )
 
     def _drain_events(self) -> None:
         log = self.query_one("#run-log", RichLog)
-        while True:
+        for _ in range(EVENTS_PER_TICK):
             try:
                 item = self._events.get_nowait()
             except queue.Empty:
@@ -453,6 +475,7 @@ class ConsoleApp(App[GymPlan | None]):
         self.query_one("#sprites").display = view is View.CATALOG
         self.query_one("#header-title", Static).update(_header(view))
         self._paint_sprites()
+        self._paint_telemetry()
         self._set_status(_footer(view))
 
     def _set_status(self, text: str) -> None:
