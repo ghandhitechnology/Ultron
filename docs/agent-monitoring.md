@@ -1,6 +1,54 @@
-# Babysitting a RunPod job
+# Monitor a RunPod job from a local computer
 
-Run these commands over SSH from the Ultron checkout on the pod. They need the base Python package and tmux. Install the package with `python -m pip install -e .`. The TUI extra is optional.
+Use the local `ultron runpod` commands to observe the RunPod container and the Ultron job in one record. The command asks `runpodctl` for the current pod and direct SSH details, then runs the bounded Ultron collector in the checkout on the pod. It does not expose a web port.
+
+Install the current [RunPod CLI](https://docs.runpod.io/runpodctl/overview) on your computer and configure its API key and SSH key:
+
+```bash
+brew install runpod/runpodctl/runpodctl
+runpodctl doctor
+runpodctl pod get <pod-id>
+```
+
+The pod needs a public mapping for `22/tcp`. RunPod can change the external IP or port when a pod resets, so each observation reads fresh connection details. Install Ultron in the checkout on the pod with `python -m pip install -e .`. The local checkout also needs the base package so it can provide the `ultron runpod` command.
+
+Set the two values that stay constant for a run:
+
+```bash
+export ULTRON_RUNPOD_ID=<pod-id>
+export ULTRON_RUNPOD_REPO=/workspace/Ultron
+```
+
+You can pass the pod ID as a positional argument instead. `--identity` overrides the key reported by `runpodctl`, and `--remote-python` selects a particular interpreter. Without the latter, the command uses `<repo>/.venv/bin/python` when present and falls back to `python3`.
+
+## Observe from the local computer
+
+```bash
+# One combined snapshot.
+ultron runpod status --session ultron-gen-0 --json
+
+# Poll through short SSH outages and retain every observation locally.
+ultron runpod watch --session ultron-gen-0 --json --timeout 3600
+
+# Read only new remote log bytes on each invocation.
+ultron runpod logs --session ultron-gen-0 --json \
+  --cursor-file data/monitoring/<pod-id>/ultron-gen-0.cursor.json
+```
+
+The combined status keeps four evidence sources separate:
+
+- `pod` is the filtered RunPod lifecycle and allocation record. Environment variables from the provider response are never copied into the output.
+- `transport` reports direct SSH connection state and the remote command result.
+- `ultron` contains tmux jobs, pipeline stages, response summaries, disks, and GPU telemetry from the pod.
+- `provider_logs` contains a bounded RunPod system-log tail when SSH or the remote collector is unavailable.
+
+`watch` allows three consecutive incomplete observations by default. This prevents one dropped SSH connection from ending a monitoring loop. It writes JSONL to `data/monitoring/<pod-id>/observations.jsonl` unless you pass `--no-record` or choose another path with `--record`. A successful observation resets the miss count.
+
+RunPod `runtimeStatus` and Ultron job state answer different questions. A running pod can still have a failed training job. A stopped or terminated pod is terminal for the watch. An initializing pod or a lost SSH connection is incomplete monitoring, and the watch retries it within `--max-misses`.
+
+## Launch on the pod
+
+The commands below run in the Ultron checkout on the pod. They need the base Python package and tmux.
 
 Keep the checkout, logs, response archives, and checkpoints on the pod's persistent storage. Use the same `TMUX_TMPDIR`, `ULTRON_TMUX_LOG_DIR`, `ULTRON_PIPELINE_STATE_DIR`, and `ULTRON_RESPONSES_DIR` values when launching and monitoring. Defaults put artifacts under the checkout's `data/` directory.
 
@@ -67,7 +115,7 @@ Generation stages reuse completed work when command and input fingerprints match
 
 ## Output contract
 
-All JSON objects include `schema_version: 1`. Status objects contain `observed_at`, `session`, `jobs`, `pipelines`, `responses`, `resources`, `issues`, `errors`, `limits`, and `exit_code`. Each job uses `session` as its identifier. Stage records include `in_scope` so an agent can distinguish the selected job from other pipelines. Text previews require `--details`; full model output stays in the referenced `responses.json` files and journals. Output includes up to four response archives by default; `--response-limit 0` omits them and `--response-limit 20` includes a larger sample.
+All JSON objects include `schema_version: 1`. Pod-local status objects contain `observed_at`, `session`, `jobs`, `pipelines`, `responses`, `resources`, `issues`, `errors`, `limits`, and `exit_code`. Local RunPod status wraps that object under `ultron` and adds `pod`, `transport`, and `provider_logs`. Each job uses `session` as its identifier. Stage records include `in_scope` so an agent can distinguish the selected job from other pipelines. Text previews require `--details`; full model output stays in the referenced `responses.json` files and journals. Output includes up to four response archives by default; `--response-limit 0` omits them and `--response-limit 20` includes a larger sample.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -76,6 +124,8 @@ All JSON objects include `schema_version: 1`. Status objects contain `observed_a
 | `2` | Invalid input, job-control error, or incomplete monitoring. |
 | `124` | Watch timed out; the job may still be running. |
 | `130` | Watch interrupted from the terminal. |
+
+For `ultron runpod`, exit `1` can come from a terminal RunPod lifecycle state or the remote Ultron status. Exit `2` means the combined observation is incomplete, including RunPod API, SSH, remote command, or JSON failures. The `watch` command only returns exit `2` after the configured consecutive-miss limit, or when a selected job exits without a recorded code.
 
 Recorded failures take precedence over monitoring errors. A status exit of `0` with an empty `jobs` array means no jobs were found. It does not mean a generation completed. For automation, select an expected session and inspect its state.
 

@@ -135,7 +135,7 @@ The module `ultron.train.family` exports the active family configuration into en
 
 ## Experiment console
 
-For an agent supervising a RunPod run over SSH, use `ultron status --json`, `ultron watch --session ultron-gen-0 --json --timeout 60`, and cursor-based `ultron logs`. Detached `ultron job start`, `restart`, and `stop` commands return structured results. See [the agent monitoring runbook](docs/agent-monitoring.md) for the launch loop, exit codes, retry handling, and incremental log reads.
+From a local computer, `ultron runpod status`, `watch`, and `logs` combine RunPod lifecycle state with the pod's Ultron jobs over direct SSH. Watches survive short connection losses and retain JSONL observations locally. On the pod, `ultron status`, `watch`, and `logs` expose the same bounded job data directly. Detached `ultron job start`, `restart`, and `stop` commands return structured results. See [the agent monitoring runbook](docs/agent-monitoring.md) for setup, exit codes, and incremental log reads.
 
 `ultron-sim` opens a full-screen TUI for the complete research loop: pick a generation, launch rollouts or training, monitor tmux jobs, run unit tests, and view `review.md` findings and metrics.
 

@@ -38,6 +38,8 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd")
     from ultron.cli.agent_cli import add_agent_commands
     add_agent_commands(sub)
+    from ultron.cli.runpod import add_runpod_commands
+    add_runpod_commands(sub)
     battle = sub.add_parser("battle", help="Follow captured model responses or inspect a saved run.")
     battle.add_argument("path", nargs="?", type=Path, default=default_response_directory())
     battle.add_argument("--screenshot", type=Path, help="Export the response view to an SVG file.")
@@ -74,6 +76,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd in {"status", "watch", "logs", "job"}:
         from ultron.cli.agent_cli import run_agent_command
         return run_agent_command(args)
+    if args.cmd == "runpod":
+        from ultron.cli.runpod import run_runpod_command
+        return run_runpod_command(args)
     if args.cmd == "battle":
         return _run_battle(args.path, screenshot=args.screenshot)
     if args.cmd == "capture":
