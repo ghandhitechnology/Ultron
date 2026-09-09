@@ -1,7 +1,6 @@
 from .schema_v1 import TrajectoryStep
 
 SUBGOAL_CAP = 0.1
-TERMINAL_WIN = 1.0
 ATTACKER_SUBGOALS = {"suid_bin_found", "writable_path_found", "shell_spawned"}
 
 
@@ -29,12 +28,6 @@ def assign_verified_shaping(
     each = cap / len(first_at)
     for index in first_at:
         steps[index].turn_reward += each
-
-
-def assign_gen01_attacker_turn_rewards(
-    steps: list[TrajectoryStep], subgoals: set[str] | None = None
-) -> None:
-    assign_verified_shaping(steps, subgoals)
 
 
 def assign_terminal_rtg(steps: list[TrajectoryStep], terminal_reward: float) -> None:

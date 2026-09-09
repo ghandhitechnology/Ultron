@@ -7,7 +7,7 @@ from ultron.train.schema_v1 import ReasonCode
 
 
 def false_root_is_rejected(probe: ProbeResult) -> bool:
-    reason, attacker, defender = adjudicate(probe)
+    reason, attacker, _ = adjudicate(probe)
     if probe.guest_attacker_euid == 0 and not probe.host_confirmed_root:
         return reason is not ReasonCode.ATTACKER_ROOT and attacker == 0.0
     return True

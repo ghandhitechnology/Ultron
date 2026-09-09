@@ -1,6 +1,6 @@
 from ultron.train.rewards import (
-    assign_gen01_attacker_turn_rewards,
     assign_terminal_rtg,
+    assign_verified_shaping,
     format_gate,
     return_to_go,
     total_gated_reward,
@@ -27,7 +27,7 @@ def test_subgoals_share_the_episode_cap() -> None:
         step(hits=["suid_bin_found", "shell_spawned"]),
         step(hits=["unknown"]),
     ]
-    assign_gen01_attacker_turn_rewards(steps)
+    assign_verified_shaping(steps)
     assert [item.turn_reward for item in steps] == [0.05, 0.05, 0.0]
     assert sum(item.turn_reward for item in steps) == 0.1
 
