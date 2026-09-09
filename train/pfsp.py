@@ -9,6 +9,7 @@ from typing import Any
 
 from .io import atomic_write_json
 from .schema_v1 import Role
+from .study import AdaptiveMix, Method
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,70 @@ def pfsp_sample(
         raise ValueError(f"no opponent checkpoints for role {opponent_role.value}")
     chooser = rng or random
     return chooser.choices(candidates, weights=[pfsp_weight(entry) for entry in candidates], k=1)[0]
+
+
+def sample_study_opponent(
+    method: Method,
+    *,
+    single: PoolEntry,
+    latest: PoolEntry,
+    historical: list[PoolEntry],
+    reference_pool: list[PoolEntry],
+    learner_relative: dict[str, float],
+    rng: random.Random,
+    mix: AdaptiveMix,
+) -> PoolEntry:
+    match method:
+        case Method.FIXED_SINGLE:
+            return single
+        case Method.FIXED_DIVERSE:
+            if not reference_pool:
+                raise ValueError("fixed diverse pool is empty")
+            return rng.choice(reference_pool)
+        case Method.ADAPTIVE_LATEST:
+            return latest
+        case Method.ADAPTIVE_HISTORY:
+            return sample_adaptive_history(
+                latest=latest,
+                historical=historical,
+                learner_relative=learner_relative,
+                rng=rng,
+                mix=mix,
+            )
+        case Method.UNTRAINED:
+            raise ValueError("untrained control does not sample training opponents")
+        case _:
+            raise AssertionError(f"unhandled method {method!r}")
+
+
+def sample_adaptive_history(
+    *,
+    latest: PoolEntry,
+    historical: list[PoolEntry],
+    learner_relative: dict[str, float],
+    rng: random.Random,
+    mix: AdaptiveMix,
+) -> PoolEntry:
+    if not historical:
+        return latest
+    draw = rng.random()
+    if draw < mix.latest:
+        return latest
+    if draw < mix.latest + mix.difficult:
+        return _difficult(historical, learner_relative, rng)
+    return rng.choice(historical)
+
+
+def _difficult(
+    historical: list[PoolEntry],
+    learner_relative: dict[str, float],
+    rng: random.Random,
+) -> PoolEntry:
+    weights = [
+        max(learner_relative.get(entry.checkpoint_id, entry.win_rate_vs_live), 1e-6)
+        for entry in historical
+    ]
+    return rng.choices(historical, weights=weights, k=1)[0]
 
 
 def assign_group_opponent(

@@ -7,9 +7,10 @@ from uuid import uuid4
 from ultron.env.backend import IsolationBackend
 
 from .adjudicator import ProbeResult, adjudicate
-from .rewards import assign_gen01_attacker_turn_rewards, assign_terminal_rtg
+from .rewards import assign_terminal_rtg, assign_verified_shaping
 from .schema_v1 import (
     SCHEMA_VERSION,
+    ReasonCode,
     Role,
     TerminalOutcome,
     TrajectoryStep,
@@ -29,6 +30,8 @@ TurnExecutor = Callable[[GuestVm, Role, dict[str, Any], int], list[TrajectorySte
 FinalProbe = Callable[[GuestVm, dict[str, Any]], ProbeResult]
 ProfileLoader = Callable[[str], dict[str, Any]]
 
+FINISH_TOOL = "finish"
+
 
 @dataclass(frozen=True)
 class EpisodeConfig:
@@ -38,6 +41,8 @@ class EpisodeConfig:
     opponent_checkpoint_id: str
     attacker_ckpt: str
     defender_ckpt: str
+    shaping: bool = True
+    prep_turns: int = 0
 
 
 class EpisodeRunner:
@@ -50,6 +55,7 @@ class EpisodeRunner:
         final_probe: FinalProbe,
         restore: RestoreFn,
         turns_per_side: int = 8,
+        turn_probe: FinalProbe | None = None,
     ) -> None:
         self.snapshot_sha256 = snapshot_sha256
         self.load_profile = load_profile
@@ -57,25 +63,62 @@ class EpisodeRunner:
         self.final_probe = final_probe
         self.restore = restore
         self.turns_per_side = turns_per_side
+        self.turn_probe = turn_probe
 
     def run(self, cfg: EpisodeConfig, vm: GuestVm) -> list[TrajectoryV1]:
         self.restore(vm, self.snapshot_sha256)
         profile = self.load_profile(cfg.profile_id)
         attacker_steps: list[TrajectoryStep] = []
         defender_steps: list[TrajectoryStep] = []
-        for turn in range(self.turns_per_side * 2):
-            side = Role.ATTACKER if turn % 2 == 0 else Role.DEFENDER
+        compromise: ProbeResult | None = None
+        hung = False
+        turn = 0
+        for _ in range(cfg.prep_turns):
+            steps = self.run_turn(vm, Role.DEFENDER, profile, turn)
+            defender_steps.extend(steps)
+            compromise, hung = self._watch(vm, profile, compromise)
+            turn += 1
+            if hung:
+                break
+        actions = 0
+        while not hung and actions < self.turns_per_side * 2:
+            side = Role.ATTACKER if actions % 2 == 0 else Role.DEFENDER
             steps = self.run_turn(vm, side, profile, turn)
-            target = attacker_steps if side == Role.ATTACKER else defender_steps
+            target = attacker_steps if side is Role.ATTACKER else defender_steps
             target.extend(steps)
+            compromise, hung = self._watch(vm, profile, compromise)
+            turn += 1
+            actions += 1
+            if hung:
+                break
+            if side is Role.ATTACKER and _has_finish(steps):
+                break
 
         probe = self.final_probe(vm, profile)
+        if hung and not probe.hung:
+            probe = ProbeResult(
+                guest_attacker_euid=probe.guest_attacker_euid,
+                host_confirmed_root=probe.host_confirmed_root,
+                availability_ok=probe.availability_ok,
+                infra_ok=probe.infra_ok,
+                timed_out=probe.timed_out,
+                hung=True,
+                ordinary_user_ok=probe.ordinary_user_ok,
+                recovered=probe.recovered,
+            )
         reason, attacker_reward, defender_reward = adjudicate(probe)
-        if cfg.generation <= 1:
-            assign_gen01_attacker_turn_rewards(attacker_steps)
-        assign_terminal_rtg(attacker_steps, attacker_reward, generation=cfg.generation)
-        assign_terminal_rtg(defender_steps, defender_reward, generation=cfg.generation)
+        recovered = False
+        if compromise is not None:
+            recovered = not (
+                probe.guest_attacker_euid == 0 and probe.host_confirmed_root
+            )
+            reason, attacker_reward, defender_reward = ReasonCode.ATTACKER_ROOT, 1.0, 0.0
+        if cfg.shaping:
+            assign_verified_shaping(attacker_steps)
+        assign_terminal_rtg(attacker_steps, attacker_reward)
+        assign_terminal_rtg(defender_steps, defender_reward)
 
+        unresolved = reason in {ReasonCode.TIMEOUT, ReasonCode.HANG} and compromise is None
         terminal = TerminalOutcome(
             reason_code=reason,
             attacker_euid=probe.guest_attacker_euid,
@@ -83,12 +126,36 @@ class EpisodeRunner:
             availability_ok=probe.availability_ok,
             attacker_reward=attacker_reward,
             defender_reward=defender_reward,
+            recovered=recovered,
+            unresolved=unresolved,
+            ordinary_user_ok=probe.ordinary_user_ok,
         )
         episode_id = str(uuid4())
         return [
             self._trajectory(cfg, episode_id, Role.ATTACKER, attacker_steps, terminal, vm),
             self._trajectory(cfg, episode_id, Role.DEFENDER, defender_steps, terminal, vm),
         ]
+
+    def _watch(
+        self,
+        vm: GuestVm,
+        profile: dict[str, Any],
+        compromise: ProbeResult | None,
+    ) -> tuple[ProbeResult | None, bool]:
+        if self.turn_probe is None:
+            return compromise, False
+        probe = self.turn_probe(vm, profile)
+        if not probe.infra_ok:
+            return compromise, False
+        if probe.hung:
+            return compromise, True
+        if (
+            compromise is None
+            and probe.guest_attacker_euid == 0
+            and probe.host_confirmed_root
+        ):
+            return probe, False
+        return compromise, False
 
     @staticmethod
     def _trajectory(
@@ -112,3 +179,7 @@ class EpisodeRunner:
             terminal=terminal,
             isolation_backend=vm.isolation,
         )
+
+
+def _has_finish(steps: list[TrajectoryStep]) -> bool:
+    return any(event.name == FINISH_TOOL for step in steps for event in step.tool_events)

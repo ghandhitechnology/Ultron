@@ -21,7 +21,7 @@ from ultron.train.schema_v1 import ReasonCode
         ),
         (
             ProbeResult(1000, False, True, True, True),
-            (ReasonCode.TIMEOUT, 0.0, 1.0),
+            (ReasonCode.TIMEOUT, 0.0, 0.0),
         ),
         (
             ProbeResult(1000, False, True, True, False),
@@ -38,3 +38,10 @@ def test_adjudicator_precedence(
 def test_guest_root_without_host_confirmation_does_not_win() -> None:
     probe = ProbeResult(0, False, True, True, False)
     assert adjudicate(probe)[0] == ReasonCode.DEFENDER_HOLD
+
+
+def test_hang_and_ordinary_user_are_not_defender_wins() -> None:
+    hang = ProbeResult(1000, False, True, True, False, hung=True)
+    assert adjudicate(hang) == (ReasonCode.HANG, 0.0, 0.0)
+    user = ProbeResult(1000, False, True, True, False, ordinary_user_ok=False)
+    assert adjudicate(user) == (ReasonCode.AVAILABILITY_FAIL, 0.0, 0.0)

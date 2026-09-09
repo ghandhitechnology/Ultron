@@ -1,0 +1,10 @@
+ts	phase	decision	why	evidence	result
+2026-09-09T11:05:00Z	frame	encode the locked study as types and tests, not a GPU run	paid execution still needs a spending cap and this VM cannot train 8B	configs/study/final.yaml	open
+2026-09-09T11:06:00Z	frame	skip a second arena on the research design	the user already locked the methods after grill-me	user_query	skipped
+2026-09-09T11:07:00Z	design	keep 8B under data/families/qwen-8b and 4B on historical roots	the study namespaces artifacts by model	train/family.py	tests green
+2026-09-09T12:20:00Z	loop	default family is qwen-8b with thinking on	the study names 8B as the default across train, eval, and serve	train/family.py	tests green
+2026-09-09T12:21:00Z	loop	cap verified shaping at 0.1 total and keep returns off the reward field	the lock forbids mixing return-to-go into the reward	train/rewards.py	tests green
+2026-09-09T12:22:00Z	loop	timeout and hang score 0/0	a timeout must not become a defender win	train/adjudicator.py	tests green
+2026-09-09T12:23:00Z	loop	disable the role-aware baseline in every GRPO yaml	group centering already cancels a constant role shift	configs/train_grpo.yaml	tests green
+2026-09-09T12:24:00Z	loop	adaptive history samples 50/25/25	learner-relative difficulty needs a fixed mix	train/pfsp.py	tests green
+2026-09-09T12:25:00Z	verify	318 passed, study check holds	ran pytest and python -m ultron.train.study check	pytest -q	VERIFIED

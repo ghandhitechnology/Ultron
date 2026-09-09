@@ -337,7 +337,7 @@ Pass when all result rows and aggregate metrics exist under `data/eval/` and the
 Install a vLLM version compatible with the pinned model in the project environment. Both Gemma 4 Unified packs require vLLM 0.23 or newer. Cache model weights on local NVMe. After a generation, archive the serveable LoRAs:
 
 ```bash
-# Default (qwen-4b)
+# Default (qwen-8b)
 ./scripts/archive_weights.sh
 # or one generation:
 ./scripts/archive_weights.sh --generation 0
@@ -380,7 +380,7 @@ curl -fsS http://127.0.0.1:8001/v1/models | jq
 curl -fsS http://127.0.0.1:8002/v1/models | jq
 ```
 
-Send one structured canary request to each endpoint and verify the selected model IDs are `attacker-lora` and `defender-lora`. The launchers pass `enable_thinking=false` through chat-template kwargs. Confirm your pinned vLLM revision honors that argument before M5. Families are a separate option (`ULTRON_MODEL_FAMILY` or `--family` on generation and train scripts). The default 4B job still passes thinking-off. Gemma omits that flag.
+Send one structured canary request to each endpoint and verify the selected model IDs are `attacker-lora` and `defender-lora`. The launchers pass `enable_thinking=true` through chat-template kwargs for Qwen packs. Confirm your pinned vLLM revision honors that argument before M5. Families are a separate option (`ULTRON_MODEL_FAMILY` or `--family` on generation and train scripts). The default 8B job passes thinking-on. Gemma omits that flag.
 
 Stop both vLLM sessions before training:
 
@@ -421,7 +421,7 @@ The DPO command must accept:
 Run one generation. The script starts session `ultron-gen-0` and keeps running if the SSH session dies:
 
 ```bash
-# Default (qwen-4b)
+# Default (qwen-8b)
 ./scripts/run_generation.sh 0
 ./scripts/tmux_job.sh attach ultron-gen-0
 
@@ -450,7 +450,7 @@ After rollout, and again after archive, PFSP, and eval, the job writes `review.m
 Re-run the same command yourself after a job:
 
 ```bash
-# Default (qwen-4b)
+# Default (qwen-8b)
 python -m ultron.train.review data/traces/gen0 --phase complete --generation 0 \
   --eval-dir data/eval --archive-dir data/archives --pfsp data/checkpoints/pfsp_pool.json
 
@@ -655,7 +655,7 @@ Local unit tests verify pure Python contracts and policy logic. They do not veri
 - Native KVM or libvirt behavior on this machine.
 - The Ubuntu 18.04 image provenance or frozen snapshot hash.
 - Pi's runtime API at the submodule commit you select.
-- vLLM compatibility with Qwen3.5 and the thinking-off flag.
+- vLLM compatibility with Qwen3-8B and the thinking-on flag.
 - veRL GRPO or the chosen DPO launcher's version-specific config.
 - GPU memory fit, throughput, convergence, or tier-3 research results.
 

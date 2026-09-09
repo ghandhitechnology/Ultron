@@ -18,7 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--family",
-        help="Base-model family for console launches: qwen-4b, qwen-8b, gemma, or gemma-abliterated.",
+        help="Base-model family for console launches: qwen-8b (default), qwen-4b, gemma, or gemma-abliterated.",
     )
     parser.add_argument(
         "--check",
@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
     console = sub.add_parser("console", help="Experiment control TUI for jobs, tests, and results.")
     console.add_argument(
         "--family",
-        help="Base-model family for console launches: qwen-4b, qwen-8b, gemma, or gemma-abliterated.",
+        help="Base-model family for console launches: qwen-8b (default), qwen-4b, gemma, or gemma-abliterated.",
     )
     console.add_argument("--check", action="store_true", help="Same as top-level --check.")
     console.add_argument("--session", help="Open this session in the progress view.")

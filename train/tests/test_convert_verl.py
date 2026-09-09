@@ -55,18 +55,21 @@ def test_one_record_per_step_with_step_reward() -> None:
     assert [record["extra_info"]["turn_index"] for record in records] == [0, 1]
     assert all(record["extra_info"]["episode_id"] == "episode-1" for record in records)
     assert all(record["extra_info"]["generation"] == 1 for record in records)
+    assert [record["extra_info"]["return_to_go"] for record in records] == [0.6, 0.5]
+    assert all(record["extra_info"]["behavior_policy_id"] == "attacker_lora" for record in records)
 
 
 def test_format_gate_zeroes_all_rewards() -> None:
     traj = make_trajectory([make_step(0, reward=0.1), make_step(1, reward=0.5, valid=False)])
     records = trajectory_to_verl_records(traj, generation=1)
     assert [record["reward"] for record in records] == [0.0, 0.0]
+    assert [record["extra_info"]["return_to_go"] for record in records] == [0.0, 0.0]
 
 
-def test_gen2_terminal_on_every_step() -> None:
-    traj = make_trajectory([make_step(0, reward=1.0), make_step(1, reward=1.0)])
-    records = trajectory_to_verl_records(traj, generation=2)
-    assert [record["reward"] for record in records] == [1.0, 1.0]
+def test_infra_fail_is_excluded_from_optimization() -> None:
+    traj = make_trajectory([make_step(0, reward=0.1)])
+    traj.terminal.reason_code = ReasonCode.INFRA_FAIL
+    assert trajectory_to_verl_records(traj, generation=1) == []
 
 
 def test_empty_trajectory_raises() -> None:

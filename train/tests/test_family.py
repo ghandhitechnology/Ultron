@@ -63,19 +63,18 @@ def _pack_files(name: FamilyName) -> dict[str, Path]:
     }
 
 
-def test_default_is_qwen_4b_with_historical_roots() -> None:
+def test_default_is_qwen_8b_with_namespaced_roots() -> None:
     pack = resolve(environ={})
-    assert pack.name is FamilyName.QWEN_4B
-    assert pack.base_model == "Qwen/Qwen3.5-4B"
-    assert pack.model_config == ORIGINAL["model"]
-    assert pack.checkpoint_root == ROOT / "data" / "checkpoints"
-    assert pack.archive_root == ROOT / "data" / "archives"
-    assert pack.pfsp_manifest == ROOT / "data" / "checkpoints" / "pfsp_pool.json"
+    assert pack.name is FamilyName.QWEN_8B
+    assert pack.base_model == "Qwen/Qwen3-8B"
+    assert pack.checkpoint_root == ROOT / "data" / "families" / "qwen-8b" / "checkpoints"
+    assert pack.archive_root == ROOT / "data" / "families" / "qwen-8b" / "archives"
+    assert pack.pfsp_manifest == ROOT / "data" / "families" / "qwen-8b" / "checkpoints" / "pfsp_pool.json"
 
 
 def test_empty_or_whitespace_env_is_unset() -> None:
-    assert resolve(environ={"ULTRON_MODEL_FAMILY": ""}).name is FamilyName.QWEN_4B
-    assert resolve(environ={"ULTRON_MODEL_FAMILY": "  \n"}).name is FamilyName.QWEN_4B
+    assert resolve(environ={"ULTRON_MODEL_FAMILY": ""}).name is FamilyName.QWEN_8B
+    assert resolve(environ={"ULTRON_MODEL_FAMILY": "  \n"}).name is FamilyName.QWEN_8B
 
 
 def test_env_selects_family() -> None:
@@ -124,7 +123,7 @@ def test_hf_pins_agree_in_each_pack() -> None:
         assert model_id == grpo_id == dpo_id == pack.base_model
 
 
-def test_qwen_packs_include_thinking_off_and_gemma_packs_omit() -> None:
+def test_qwen_packs_enable_thinking_and_gemma_packs_omit() -> None:
     qwen_4b = resolve(FamilyName.QWEN_4B, environ={})
     qwen_8b = resolve(FamilyName.QWEN_8B, environ={})
     gemma = resolve(FamilyName.GEMMA, environ={})
@@ -132,9 +131,9 @@ def test_qwen_packs_include_thinking_off_and_gemma_packs_omit() -> None:
     for pack in (qwen_4b, qwen_8b):
         args = pack.vllm_chat_template_args()
         assert args[0] == "--chat-template-kwargs"
-        assert json.loads(args[1]) == {"enable_thinking": False}
+        assert json.loads(args[1]) == {"enable_thinking": True}
         exported = pack.export_environ()["ULTRON_VLLM_CHAT_TEMPLATE_KWARGS"]
-        assert json.loads(exported) == {"enable_thinking": False}
+        assert json.loads(exported) == {"enable_thinking": True}
     for pack in (gemma, gemma_abliterated):
         assert pack.vllm_chat_template_args() == ()
         assert pack.export_environ()["ULTRON_VLLM_CHAT_TEMPLATE_KWARGS"] == ""
@@ -164,12 +163,12 @@ def test_abliterated_gemma_has_its_own_model_and_roots() -> None:
     assert pack.archive_root == ROOT / "data" / "families" / "gemma-abliterated" / "archives"
 
 
-def test_default_artifact_roots_unchanged() -> None:
-    pack = resolve(environ={})
+def test_four_b_keeps_historical_roots() -> None:
+    pack = resolve("qwen-4b", environ={})
     assert pack.checkpoint_root == ROOT / "data" / "checkpoints"
     assert pack.archive_root == ROOT / "data" / "archives"
     assert pack.pfsp_manifest == ROOT / "data" / "checkpoints" / "pfsp_pool.json"
-    other = resolve("qwen-8b", environ={})
+    other = resolve(environ={})
     assert other.checkpoint_root != pack.checkpoint_root
     assert other.archive_root != pack.archive_root
 
@@ -187,8 +186,8 @@ def test_base_model_override_match_is_ok() -> None:
 def test_export_environ_keys_and_cli() -> None:
     pack = resolve(environ={})
     exported = pack.export_environ()
-    assert exported["ULTRON_MODEL_FAMILY"] == "qwen-4b"
-    assert exported["ULTRON_PACK_BASE_MODEL"] == "Qwen/Qwen3.5-4B"
+    assert exported["ULTRON_MODEL_FAMILY"] == "qwen-8b"
+    assert exported["ULTRON_PACK_BASE_MODEL"] == "Qwen/Qwen3-8B"
     assert exported["ULTRON_GRPO_CONFIG_NAME"] == "train_grpo"
     assert exported["ULTRON_VLLM_MAX_MODEL_LEN"] == "32768"
     assert set(exported) == {
@@ -219,8 +218,8 @@ def test_export_environ_keys_and_cli() -> None:
         env=env,
     )
     assert result.returncode == 0, result.stderr
-    assert "declare -x ULTRON_MODEL_FAMILY=qwen-4b" in result.stdout
-    assert "declare -x ULTRON_PACK_BASE_MODEL=Qwen/Qwen3.5-4B" in result.stdout
+    assert "declare -x ULTRON_MODEL_FAMILY=qwen-8b" in result.stdout
+    assert "declare -x ULTRON_PACK_BASE_MODEL=Qwen/Qwen3-8B" in result.stdout
 
 
 def test_lib_family_exports_survive_the_function() -> None:
@@ -240,9 +239,9 @@ def test_lib_family_exports_survive_the_function() -> None:
     )
     assert result.returncode == 0, result.stderr
     family, base, checkpoints = result.stdout.splitlines()
-    assert family == "qwen-4b"
-    assert base == "Qwen/Qwen3.5-4B"
-    assert checkpoints.endswith("/data/checkpoints")
+    assert family == "qwen-8b"
+    assert base == "Qwen/Qwen3-8B"
+    assert checkpoints.endswith("/data/families/qwen-8b/checkpoints")
 
 
 def test_lib_family_can_switch_and_rejects_unknown() -> None:
@@ -278,9 +277,8 @@ def test_lib_family_can_switch_and_rejects_unknown() -> None:
 
 def test_load_base_model_fallback_matches_default_pack(tmp_path: Path) -> None:
     missing = tmp_path / "missing.yaml"
-    assert load_base_model(missing) == "Qwen/Qwen3.5-4B"
+    assert load_base_model(missing) == "Qwen/Qwen3-8B"
     assert load_base_model(missing) == resolve(environ={}).base_model
-    assert load_base_model(missing) == _load(ORIGINAL["model"])["base_model"]
 
 
 def test_context_budget_must_fit_window(tmp_path: Path) -> None:

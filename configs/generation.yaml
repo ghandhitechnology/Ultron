@@ -18,7 +18,7 @@ credit:
     attacker_subgoal_cap: 0.1
     attacker_terminal: 1.0
     defender_terminal: 1.0
-  gen2_plus: rtg_terminal_only
+  gen2_plus: terminal_on_last_step
 dpo:
   start_generation: 2
   branch_role: attacker
