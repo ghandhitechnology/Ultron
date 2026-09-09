@@ -5,9 +5,10 @@ import sys
 from pathlib import Path
 
 from ultron import __version__
-from ultron.cli.catalog import CatalogError, GymPlan, resolve_pack
+from ultron.cli.catalog import BattlePlan, CatalogError, GymPlan, resolve_pack
 from ultron.cli.demo import make_demo
-from ultron.cli.model import JobMeta
+from ultron.cli.model import JobMeta, Phase
+from ultron.cli.responses import default_response_directory
 from ultron.env.backend import IsolationBackend
 
 
@@ -35,12 +36,24 @@ def main(argv: list[str] | None = None) -> int:
         help="Log lines to show with --check (default 50).",
     )
     sub = parser.add_subparsers(dest="cmd")
+    from ultron.cli.agent_cli import add_agent_commands
+    add_agent_commands(sub)
+    battle = sub.add_parser("battle", help="Follow captured model responses or inspect a saved run.")
+    battle.add_argument("path", nargs="?", type=Path, default=default_response_directory())
+    battle.add_argument("--screenshot", type=Path, help="Export the response view to an SVG file.")
+    capture = sub.add_parser("capture", help="Forward an existing model endpoint and record its responses.")
+    capture.add_argument("--upstream", required=True, help="Upstream server origin, e.g. http://127.0.0.1:8001.")
+    capture.add_argument("--role", choices=("attacker", "defender"), required=True)
+    capture.add_argument("--port", type=int, default=9001, help="Local capture port, default 9001.")
+    capture.add_argument("--generation", type=int, default=0)
+    capture.add_argument("--responses-dir", type=Path, default=default_response_directory())
     demo = sub.add_parser("demo", help="Run a fake episode loop in the live TUI.")
     demo.add_argument("--episodes", type=int, default=2)
     demo.add_argument("--turns-per-side", type=int, default=2)
     demo.add_argument("--generation", type=int, default=0)
     demo.add_argument("--profile", default="web")
     demo.add_argument("--delay", type=float, default=0.12)
+    demo.add_argument("--responses-dir", type=Path, help="Directory for per-run response JSON files, default data/responses.")
     demo.add_argument(
         "--screenshot",
         type=Path,
@@ -58,6 +71,14 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--session", help="Show only this session.")
     check.add_argument("--tail", type=int, default=50)
     args = parser.parse_args(argv)
+    if args.cmd in {"status", "watch", "logs", "job"}:
+        from ultron.cli.agent_cli import run_agent_command
+        return run_agent_command(args)
+    if args.cmd == "battle":
+        return _run_battle(args.path, screenshot=args.screenshot)
+    if args.cmd == "capture":
+        from ultron.cli.capture import run_capture
+        return run_capture(args)
     if args.cmd == "demo":
         return _run_demo(args)
     if getattr(args, "check", False):
@@ -98,7 +119,29 @@ def _run_demo(args: argparse.Namespace) -> int:
         sys.stderr.write(_tui_install_hint(exc))
         return 2
     runner, cases = make_demo(meta, delay_s=args.delay)
-    run_live_job(meta, runner, cases, screenshot=args.screenshot)
+    try:
+        snapshot = run_live_job(meta, runner, cases, screenshot=args.screenshot, responses_dir=args.responses_dir)
+    except OSError as exc:
+        sys.stderr.write(f"Could not run demo: {exc}\n")
+        return 1
+    if snapshot.responses_path:
+        sys.stdout.write(f"Responses saved to {snapshot.responses_path}\n")
+    if snapshot.error:
+        sys.stderr.write(f"{snapshot.error}\n")
+    return 1 if snapshot.phase is Phase.FAILED else 0
+
+
+def _run_battle(path: Path, *, screenshot: Path | None = None) -> int:
+    try:
+        from ultron.cli.battle import run_battle
+    except ImportError as exc:
+        sys.stderr.write(_tui_install_hint(exc))
+        return 2
+    try:
+        run_battle(path.expanduser(), screenshot=screenshot)
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"Could not open battle responses: {exc}\n")
+        return 1
     return 0
 
 
@@ -194,6 +237,9 @@ def _run_console(*, family: str | None = None, initial_view: str | None = None, 
         initial_session = None
         if result is None:
             return 0
+        if isinstance(result, BattlePlan):
+            _run_battle(result.path)
+            continue
         if not isinstance(result, GymPlan):
             return 0
         runner, cases = make_demo(result.meta, delay_s=result.delay_s)

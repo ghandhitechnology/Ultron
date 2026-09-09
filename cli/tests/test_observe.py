@@ -5,7 +5,7 @@ from ultron.env.backend import IsolationBackend
 from ultron.train.schema_v1 import ReasonCode
 
 
-def test_drive_demo_through_real_episode_runner() -> None:
+def test_drive_demo_through_real_episode_runner(tmp_path) -> None:
     meta = JobMeta(
         generation=0,
         profile_id="web",
@@ -15,7 +15,7 @@ def test_drive_demo_through_real_episode_runner() -> None:
     )
     runner, cases = make_demo(meta, delay_s=0.0, sleep=lambda _s: None)
     events: list = []
-    drive_job(meta, runner, cases, emit=events.append, clock=origin_clock())
+    drive_job(meta, runner, cases, emit=events.append, clock=origin_clock(), responses_dir=tmp_path)
     snap = initial_snapshot(meta, started_at_s=0.0)
     for event in events:
         snap = apply(snap, event)
@@ -24,13 +24,13 @@ def test_drive_demo_through_real_episode_runner() -> None:
     assert snap.completed[0].terminal.reason_code is ReasonCode.DEFENDER_HOLD
     assert snap.completed[1].terminal.reason_code is ReasonCode.ATTACKER_ROOT
     kinds = [event.kind for event in events]
-    assert kinds[0] == "restore_started"
+    assert kinds[:2] == ["response_archive_opened", "restore_started"]
     assert kinds[-1] == "job_ended"
     assert "tool" in kinds
     assert "probe_finished" in kinds
 
 
-def test_short_case_list_fails_instead_of_illegal_complete() -> None:
+def test_short_case_list_fails_instead_of_illegal_complete(tmp_path) -> None:
     meta = JobMeta(
         generation=0,
         profile_id="web",
@@ -40,7 +40,7 @@ def test_short_case_list_fails_instead_of_illegal_complete() -> None:
     )
     runner, cases = make_demo(meta, delay_s=0.0, sleep=lambda _s: None)
     events: list = []
-    drive_job(meta, runner, cases[:1], emit=events.append, clock=origin_clock())
+    drive_job(meta, runner, cases[:1], emit=events.append, clock=origin_clock(), responses_dir=tmp_path)
     snap = initial_snapshot(meta, started_at_s=0.0)
     for event in events:
         snap = apply(snap, event)

@@ -4,6 +4,7 @@ import pytest
 
 from ultron.cli.catalog import (
     ActionId,
+    BattlePlan,
     CatalogError,
     ForegroundPlan,
     GymPlan,
@@ -31,7 +32,10 @@ def test_default_plans_cover_every_action() -> None:
         raw = {field.key: field.default for field in spec.fields}
         built = plan(spec.id, raw, root=ROOT)
         kinds.append(built.kind)
-        if spec.id is ActionId.DEMO:
+        if spec.id is ActionId.BATTLE:
+            assert isinstance(built, BattlePlan)
+            assert built.path == ROOT / "data" / "responses"
+        elif spec.id is ActionId.DEMO:
             assert isinstance(built, GymPlan)
             assert built.meta.isolation is IsolationBackend.DOCKER
         elif spec.id in {

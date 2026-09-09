@@ -6,6 +6,7 @@ from collections.abc import Callable
 from ultron.cli.model import JobMeta
 from ultron.cli.observe import EpisodeCase
 from ultron.env.backend import GuestHandle, IsolationBackend
+from ultron.response_stream import ModelResponse
 from ultron.train.adjudicator import ProbeResult
 from ultron.train.episode_runner import EpisodeConfig, EpisodeRunner
 from ultron.train.schema_v1 import Role, ToolEvent
@@ -32,8 +33,11 @@ def make_demo(
         return {"profile_id": profile_id}
 
     def run_turn(vm, role: Role, profile: dict, turn: int):
-        sleep(delay_s)
         tool = _demo_tool(role, turn)
+        with ModelResponse(f"demo-{role.value}") as response:
+            for chunk in ("Demo response. ", f"Turn {turn + 1}: ", f"running {tool.args['cmd']}."):
+                sleep(delay_s / 3)
+                response.write(chunk)
         return [
             build_trajectory_step(
                 turn_index=turn,

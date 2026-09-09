@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from textwrap import wrap
+
 from ultron.cli.model import (
     EpisodeEnded,
     JobEnded,
@@ -7,6 +9,10 @@ from ultron.cli.model import (
     JobEvent,
     JobProgress,
     JobSnapshot,
+    ModelResponseStarted,
+    ModelResponseDelta,
+    ModelResponseFinished,
+    ResponseArchiveOpened,
     Phase,
     ProbeFinished,
     ProbeStarted,
@@ -66,6 +72,8 @@ def header_line(snapshot: JobSnapshot) -> str:
 
 def footer_line(snapshot: JobSnapshot, *, sim: bool = True) -> str:
     mode = "SIM MODE" if sim else "LIVE"
+    if snapshot.error:
+        return f"  {mode} · failed · {snapshot.error}"
     return (
         f"  ultron v{snapshot.meta.version}   generation {snapshot.meta.generation}   "
         f"{snapshot.meta.profile_id}   {snapshot.meta.isolation.value}                {mode}"
@@ -99,8 +107,26 @@ def transcript_header(snapshot: JobSnapshot) -> str:
     )
 
 
-def transcript_entry(event: JobEvent) -> str:
+def transcript_entry(event: JobEvent, snapshot: JobSnapshot | None = None) -> str:
     stamp = _fmt_clock(event.at_s)
+    if isinstance(event, ResponseArchiveOpened):
+        return _entry(stamp, "RESPONSES", "#585b70", "Saving model responses", [event.path])
+    if isinstance(event, ModelResponseDelta):
+        return ""
+    if isinstance(event, ModelResponseStarted):
+        return _entry(stamp, event.role.value.upper(), "#585b70", "Generating response", [event.model])
+    if isinstance(event, ModelResponseFinished):
+        response = None if snapshot is None else (
+            snapshot.attacker_response if event.role is Role.ATTACKER else snapshot.defender_response
+        )
+        details = response.text.splitlines() if response and response.text else ["No response text"]
+        if event.error:
+            details.append(event.error)
+        return _entry(
+            stamp, event.role.value.upper(), "#b44c6d" if event.role is Role.ATTACKER else "#39745e",
+            f"response {event.status}", details,
+            result="success" if event.status == "complete" else "error",
+        )
     if isinstance(event, RestoreStarted):
         return _entry(
             stamp,
@@ -206,6 +232,21 @@ def transcript_entry(event: JobEvent) -> str:
             result="error",
         )
     raise TypeError(f"unhandled transcript event {type(event)!r}")
+
+
+def response_block(snapshot: JobSnapshot, *, width: int = 100) -> str:
+    """Keep the latest response for each role visible as chunks arrive."""
+    sections = []
+    for role, response in (("ATTACKER", snapshot.attacker_response), ("DEFENDER", snapshot.defender_response)):
+        if response is None:
+            continue
+        # The transcript and JSON retain the response; this is a bounded live preview.
+        preview = [
+            row for line in response.text[-width * 4:].splitlines()
+            for row in (wrap(line, width=max(1, width)) or [""])
+        ][-2:]
+        sections.append(f"{role} · {response.model or 'model'} · {response.status}\n" + ("\n".join(preview) or "Waiting for response text"))
+    return "\n".join(sections)
 
 
 def _entry(
@@ -379,6 +420,7 @@ def _side_detail(snapshot: JobSnapshot, role: Role) -> str:
     active = snapshot.active_role is role
     last = snapshot.last_attacker if role is Role.ATTACKER else snapshot.last_defender
     tools = snapshot.attacker_tools if role is Role.ATTACKER else snapshot.defender_tools
+    response = snapshot.attacker_response if role is Role.ATTACKER else snapshot.defender_response
     return "\n".join(
         [
             role.value.upper(),
@@ -386,7 +428,9 @@ def _side_detail(snapshot: JobSnapshot, role: Role) -> str:
             f"  state     {'ACTING' if active else 'waiting'}",
             f"  tools     {tools}",
             f"  last      {last}",
-            f"  turn      {snapshot.turn_index if snapshot.turn_index is not None else '—'}",
+            f"  turn      {snapshot.turn_index + 1 if snapshot.turn_index is not None else '—'}",
+            "  response",
+            response.text if response else "  Waiting for response text",
         ]
     )
 
@@ -433,5 +477,5 @@ def _turn_display(snapshot: JobSnapshot, prog: JobProgress) -> int:
 
 def _turn_label(snapshot: JobSnapshot, role: Role) -> str:
     if snapshot.active_role is role and snapshot.turn_index is not None:
-        return str(snapshot.turn_index)
+        return str(snapshot.turn_index + 1)
     return "—"

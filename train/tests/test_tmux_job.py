@@ -65,6 +65,14 @@ def wait_until(predicate, timeout: float = 5.0) -> None:
     raise AssertionError("condition not met before timeout")
 
 
+def process_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 def parse_status(env: dict[str, str], session: str) -> tuple[int, bool, str]:
     result = run_job(["status", session], env)
     assert result.returncode == 0, result.stderr
@@ -101,6 +109,33 @@ def test_start_status_logs_and_stop(job_env: dict[str, str], tmp_path: Path) -> 
     stopped = run_job(["stop", session], job_env)
     assert stopped.returncode == 0, stopped.stderr
     wait_until(lambda: run_job(["status", session], job_env).returncode != 0)
+
+
+def test_stop_terminates_the_job_process_group(
+    job_env: dict[str, str], tmp_path: Path
+) -> None:
+    session = "ultrontest-stop-tree"
+    parent_pid_path = tmp_path / "parent-pid"
+    child_pid_path = tmp_path / "child-pid"
+    command = (
+        f'printf "%s\\n" "$$" > "{parent_pid_path}"; '
+        f'sleep 30 & printf "%s\\n" "$!" > "{child_pid_path}"; wait'
+    )
+    started = run_job(["start", session, "--", "bash", "-c", command], job_env)
+    assert started.returncode == 0, started.stderr
+    try:
+        wait_until(lambda: parent_pid_path.exists() and child_pid_path.exists())
+        parent_pid = int(parent_pid_path.read_text())
+        child_pid = int(child_pid_path.read_text())
+        assert process_exists(parent_pid)
+        assert process_exists(child_pid)
+
+        stopped = run_job(["stop", session], job_env)
+        assert stopped.returncode == 0, stopped.stderr
+        wait_until(lambda: not process_exists(parent_pid) and not process_exists(child_pid))
+    finally:
+        if run_job(["status", session], job_env).returncode == 0:
+            run_job(["stop", session], job_env)
 
 
 def test_duplicate_start_fails(job_env: dict[str, str]) -> None:
@@ -219,6 +254,59 @@ def test_wrap_run_generation_detaches(job_env: dict[str, str]) -> None:
         assert "=== Ultron generation ultron-gen-0 ===" not in logs
     finally:
         run_job(["stop", "ultron-gen-0"], job_env)
+
+
+def test_rollout_worker_preserves_arguments_when_wrapped(
+    job_env: dict[str, str], tmp_path: Path
+) -> None:
+    generation = "987654"
+    session = f"ultron-rollout-gen{generation}"
+    captured = tmp_path / "rollout-args"
+    launcher = tmp_path / "fake-rollout"
+    trace_dir = ROOT / "data" / "traces" / f"gen{generation}"
+    launcher.write_text(
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$@" > "$ULTRON_CAPTURE_ARGS"\n'
+    )
+    launcher.chmod(0o755)
+    env = {
+        **job_env,
+        "ULTRON_ROLLOUT_COMMAND": str(launcher),
+        "ULTRON_CAPTURE_ARGS": str(captured),
+    }
+
+    launched = subprocess.run(
+        [
+            "bash",
+            str(ROOT / "scripts" / "rollout_worker.sh"),
+            "--generation",
+            generation,
+            "--episodes",
+            "7",
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert launched.returncode == 0, launched.stderr
+    assert f"Started {session}" in launched.stdout
+    try:
+        wait_until(captured.exists)
+        assert captured.read_text().splitlines() == [
+            "--generation",
+            generation,
+            "--episodes",
+            "7",
+            "--output",
+            f"data/traces/gen{generation}",
+        ]
+    finally:
+        if run_job(["status", session], env).returncode == 0:
+            run_job(["stop", session], env)
+        if trace_dir.exists():
+            trace_dir.rmdir()
 
 
 def test_nested_scripts_stay_in_parent_session(job_env: dict[str, str], tmp_path: Path) -> None:

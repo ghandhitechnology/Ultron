@@ -56,6 +56,7 @@ Screen {
 
 #detail {
     height: 9;
+    overflow-y: auto;
     padding: 1 2;
     border-bottom: solid #6c5ce7;
     background: #24243b;
@@ -72,9 +73,18 @@ Screen {
     text-style: bold;
 }
 
+#response {
+    height: auto;
+    max-height: 8;
+    padding: 0 2;
+    background: #24243b;
+    color: #e5e7f2;
+    overflow-y: auto;
+}
+
 #log {
     height: 1fr;
-    min-height: 12;
+    min-height: 4;
     padding: 1 2;
     background: #1e1e2e;
     color: #e5e7f2;

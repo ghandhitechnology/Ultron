@@ -17,6 +17,50 @@ def test_demo_rejects_zero_episodes() -> None:
     assert main(["demo", "--episodes", "0"]) == 2
 
 
+def test_battle_command_opens_requested_archive(tmp_path) -> None:
+    import pytest
+    pytest.importorskip("textual")
+    with patch("ultron.cli.battle.run_battle") as run:
+        assert main(["battle", str(tmp_path)]) == 0
+    run.assert_called_once_with(tmp_path, screenshot=None)
+
+
+def test_battle_uses_shared_response_directory(tmp_path, monkeypatch) -> None:
+    import pytest
+    pytest.importorskip("textual")
+    monkeypatch.setenv("ULTRON_RESPONSES_DIR", str(tmp_path))
+    with patch("ultron.cli.battle.run_battle") as run:
+        assert main(["battle"]) == 0
+    run.assert_called_once_with(tmp_path, screenshot=None)
+
+
+def test_console_returns_after_battle_view(tmp_path) -> None:
+    import pytest
+    pytest.importorskip("textual")
+    from ultron.cli.catalog import BattlePlan
+    from ultron.cli.main import _run_console
+
+    with patch("ultron.cli.console.run_console", side_effect=[BattlePlan(tmp_path), None]):
+        with patch("ultron.cli.main._run_battle", return_value=0) as battle:
+            assert _run_console() == 0
+    battle.assert_called_once_with(tmp_path)
+
+
+def test_demo_reports_failed_run_and_response_path(tmp_path, capsys) -> None:
+    import pytest
+    pytest.importorskip("textual")
+    from types import SimpleNamespace
+    from ultron.cli.model import Phase
+
+    result = SimpleNamespace(phase=Phase.FAILED, error="Provider disconnected", responses_path=str(tmp_path / "responses.json"))
+    with patch("ultron.cli.tui.run_live_job", return_value=result) as run:
+        assert main(["demo", "--responses-dir", str(tmp_path)]) == 1
+    assert run.call_args.kwargs["responses_dir"] == tmp_path
+    output = capsys.readouterr()
+    assert str(tmp_path / "responses.json") in output.out
+    assert "Provider disconnected" in output.err
+
+
 def test_console_rejects_unknown_family() -> None:
     assert main(["--family", "llama-8b"]) == 2
     assert main(["console", "--family", "llama-8b"]) == 2

@@ -24,14 +24,24 @@ chat_kwargs=()
 if [[ -n "${ULTRON_VLLM_CHAT_TEMPLATE_KWARGS}" ]]; then
   chat_kwargs+=(--chat-template-kwargs "${ULTRON_VLLM_CHAT_TEMPLATE_KWARGS}")
 fi
+LISTEN_PORT="${ULTRON_ATTACKER_PORT:-8001}"
+UPSTREAM_PORT="${ULTRON_ATTACKER_UPSTREAM_PORT:-8101}"
+RESPONSES_DIR="${ULTRON_RESPONSES_DIR:-${ROOT}/data/responses}"
 
-CUDA_VISIBLE_DEVICES="${ULTRON_ATTACKER_GPU:-0}" \
-"${ULTRON_PYTHON}" -m vllm.entrypoints.openai.api_server \
+exec env CUDA_VISIBLE_DEVICES="${ULTRON_ATTACKER_GPU:-0}" \
+"${ULTRON_PYTHON}" -m ultron.cli.serve \
+  --role attacker \
+  --generation "${GEN}" \
+  --listen-port "${LISTEN_PORT}" \
+  --upstream-port "${UPSTREAM_PORT}" \
+  --responses-dir "${RESPONSES_DIR}" \
+  -- \
+  "${ULTRON_PYTHON}" -m vllm.entrypoints.openai.api_server \
   --model "${ULTRON_PACK_BASE_MODEL}" \
   --enable-lora \
   --lora-modules "attacker-lora=${ADAPTER}" \
   "${chat_kwargs[@]}" \
   --max-model-len "${ULTRON_VLLM_MAX_MODEL_LEN}" \
   --host 127.0.0.1 \
-  --port 8001 \
+  --port "${UPSTREAM_PORT}" \
   --gpu-memory-utilization "${ULTRON_VLLM_GPU_MEMORY_UTILIZATION}"

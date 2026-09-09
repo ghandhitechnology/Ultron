@@ -93,6 +93,10 @@ Generation, rollout, GRPO, DPO, and vLLM launchers start in named tmux sessions 
 
 Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
 
+Generation stages record completion, failure, and active process state under `data/job-state`. A stage lock rejects a second process trying to run the same stage. Resume checks include the command and preceding stage completions, so rerunning an upstream stage also invalidates downstream completions. A failed rerun removes its old success marker, and interrupted stages are not retried automatically.
+
+Set `ULTRON_PIPELINE_INPUT_KEY` to a new value when changing configuration or data outside the stage command. Set `ULTRON_PIPELINE_RESUME=0` to rerun all stages.
+
 ## Model families
 
 A job pins one base-model family. The unset family is `qwen-4b` (`Qwen/Qwen3.5-4B`), which uses the top-level `configs/` files and stores checkpoints and archives under `data/checkpoints` and `data/archives`. Alternative families are `qwen-8b` (`Qwen/Qwen3-8B`), `gemma` (`google/gemma-4-12B-it`), and `gemma-abliterated` (`huihui-ai/Huihui-gemma-4-12B-it-abliterated`). They live under `configs/families/<name>/` and write outputs under `data/families/<name>/`.
@@ -131,6 +135,8 @@ The module `ultron.train.family` exports the active family configuration into en
 
 ## Experiment console
 
+For an agent supervising a RunPod run over SSH, use `ultron status --json`, `ultron watch --session ultron-gen-0 --json --timeout 60`, and cursor-based `ultron logs`. Detached `ultron job start`, `restart`, and `stop` commands return structured results. See [the agent monitoring runbook](docs/agent-monitoring.md) for the launch loop, exit codes, retry handling, and incremental log reads.
+
 `ultron-sim` opens a full-screen TUI for the complete research loop: pick a generation, launch rollouts or training, monitor tmux jobs, run unit tests, and view `review.md` findings and metrics.
 
 ```bash
@@ -148,6 +154,7 @@ The list on the left is the catalog, grouped into gym, pipeline, train, serve, r
 
 Key bindings:
 - `enter`: run the selected action
+- `b`: open live and saved battle responses
 - `m`: focus the model-family selector dropdown (`qwen-4b`, `qwen-8b`, `gemma`, `gemma-abliterated`)
 - `a`: view catalog of runnable actions
 - `j`: list running and finished tmux jobs with live log inspection
@@ -160,7 +167,7 @@ Key bindings:
 The header selector pins one of the four families for every launch. You can also pass `--family` on startup: `ultron-sim --family gemma-abliterated`.
 
 Available console action groups:
-- **Gym**: `demo` (run simulated episodes in the live gym UI).
+- **Gym**: `battle` (follow real model responses and inspect saved requests), `demo` (run simulated episodes in the live gym UI).
 - **Pipeline**: `generation` (run full generation pipeline), `rollout` (launch rollout worker).
 - **Train**: `grpo` (train GRPO for attacker or defender), `dpo` (train prefix-branch DPO for attacker).
 - **Serve**: `serve_attacker` (serve attacker LoRA on vLLM), `serve_defender` (serve defender LoRA on vLLM).
@@ -172,6 +179,8 @@ Available console action groups:
 </p>
 
 `j` opens the tmux job table. From there, `enter` opens logs, `s` stops the session you have selected, and `g` refreshes the list. Long jobs still live in the named sessions that `scripts/tmux_job.sh` starts, not in the console.
+
+The selected job's log and status update while the view is open. Finished jobs show their exit code, distinguishing success from failure. The console reads bounded log chunks and keeps recent lines in memory; full logs remain in `data/logs`. Refresh preserves the selected job, and Escape from its full log returns to the job list.
 
 <p align="center">
   <img src="docs/screenshots/console_results_with_gen.png" alt="Generation results table showing gen 3, usable verdict, 12 episodes, and ASR 0.420" width="900" />
@@ -192,6 +201,41 @@ ultron-sim demo --episodes 2 --turns-per-side 2
 ```
 
 Click a pane (or press `a` / `s` / `d` / `t`) to expand detail. The demo drives a real `EpisodeRunner` with stub guests so you can watch the layout without GPUs or VMs. In production, the same injected `restore` / `run_turn` / `final_probe` callables wrap real guest instances while keeping `EpisodeRunner.run` unchanged. The console can also launch this gym via the "Live guest gym" action.
+
+The gym shows model text as response chunks arrive. A live panel keeps the latest response from each role visible, and completed responses appear in the scrolling transcript. Page Up pauses automatic scrolling; End returns to the newest output. Expand either role to read its latest response.
+
+Each observed run creates `data/responses/<run-id>/responses.json`, including model names, roles, episode and turn indexes, response text, and completion or error status. Failed and cancelled runs retain partial responses. Use `ultron-sim demo --responses-dir /path/to/responses` to choose another directory. The CLI prints the saved path when the view closes.
+
+`ultron battle` opens the live response viewer. The standard serving scripts capture model responses automatically on the existing client ports, 8001 and 8002. They supervise vLLM behind the recorder on ports 8101 and 8102. Each model request gets a separate response archive, so concurrent calls retain their own text and status. Closing the viewer leaves serving and recording running.
+
+Set `ULTRON_RESPONSES_DIR` to use another response directory for serving, recording, and the default battle view.
+
+```bash
+./scripts/serve_vllm_attacker.sh
+./scripts/serve_vllm_defender.sh
+ultron battle
+
+# Open saved responses from a particular directory or run.
+ultron battle data/responses/<run-id>/responses.json
+```
+
+For an existing model server, `ultron capture --role attacker --upstream http://127.0.0.1:8001 --port 9001` starts a recorder at `http://127.0.0.1:9001/v1`. Point that server's clients at the recorder. Requests and response bytes pass through as they arrive. Capture works with both streamed and ordinary chat or text completions.
+
+The response archive includes readable text and status. It also retains the provider's original response bytes and JSON events, including tool-call and reasoning fields. Model HTTP errors and interrupted streams retain their received output with an error or cancellation status.
+
+The demo generates sample text. An in-process `EpisodeRunner` integration can additionally group responses by episode and turn. Inside its `run_turn` callback, wrap the provider stream with `ModelResponse`:
+
+```python
+from ultron.response_stream import ModelResponse
+
+with ModelResponse(model=model_name) as response:
+    for text_chunk in provider_text_stream:
+        response.write(text_chunk)
+```
+
+`ultron.response_stream.stream_chat_completion` also reads text from a chat-completions SSE endpoint, publishing each chunk through the same observer. Pass the full endpoint, model name, and messages.
+
+The archive journals response events as they arrive and periodically updates the JSON snapshot. After an abrupt process exit, `ultron.cli.responses.load_response_archive(path)` replays the journal to recover text received since the last snapshot. Normal completion, errors, and closing the view write the complete JSON snapshot.
 
 ## Guest isolation backends
 

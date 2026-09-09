@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -15,6 +16,7 @@ from ultron.train.family import FamilyError, FamilyName, FamilyPack, resolve
 
 
 class ActionId(str, Enum):
+    BATTLE = "battle"
     DEMO = "demo"
     GENERATION = "generation"
     ROLLOUT = "rollout"
@@ -78,6 +80,12 @@ class GymPlan:
 
 
 @dataclass(frozen=True)
+class BattlePlan:
+    path: Path
+    kind: Literal["battle"] = "battle"
+
+
+@dataclass(frozen=True)
 class TmuxPlan:
     session: str
     argv: tuple[str, ...]
@@ -94,7 +102,7 @@ class ForegroundPlan:
     kind: Literal["foreground"] = "foreground"
 
 
-LaunchPlan: TypeAlias = GymPlan | TmuxPlan | ForegroundPlan
+LaunchPlan: TypeAlias = BattlePlan | GymPlan | TmuxPlan | ForegroundPlan
 
 
 class CatalogError(ValueError):
@@ -110,6 +118,13 @@ def all_actions(*, root: Path | None = None) -> tuple[ActionSpec, ...]:
     profiles = _profile_ids(root)
     isolation = tuple(item.value for item in IsolationBackend)
     return (
+        ActionSpec(
+            ActionId.BATTLE,
+            "Battle responses",
+            ActionGroup.GYM,
+            "Follow live model responses or inspect saved requests.",
+            (FieldSpec("path", "Response directory or JSON file", FieldKind.PATH, os.environ.get("ULTRON_RESPONSES_DIR", "data/responses")),),
+        ),
         ActionSpec(
             ActionId.DEMO,
             "Live guest gym",
@@ -310,6 +325,9 @@ def plan(
     pack = resolve_pack(family, root=root)
     family_env = _family_env(pack)
     match action_id:
+        case ActionId.BATTLE:
+            path = Path(str(values["path"])).expanduser()
+            return BattlePlan(path=path if path.is_absolute() else root / path)
         case ActionId.DEMO:
             return _plan_demo(values)
         case ActionId.GENERATION:

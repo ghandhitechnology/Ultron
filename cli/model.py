@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Literal, TypeAlias
 
 from ultron.env.backend import IsolationBackend
+from ultron.response_stream import ResponseStatus
 from ultron.train.adjudicator import ProbeResult
 from ultron.train.schema_v1 import Role, TerminalOutcome, ToolEvent
 
@@ -98,6 +99,58 @@ class ToolObserved:
 
 
 @dataclass(frozen=True)
+class ResponseArchiveOpened:
+    path: str
+    at_s: float
+    kind: Literal["response_archive_opened"] = "response_archive_opened"
+
+
+@dataclass(frozen=True)
+class ModelResponseStarted:
+    episode_index: int
+    turn_index: int
+    role: Role
+    response_id: str
+    model: str
+    at_s: float
+    kind: Literal["model_response_started"] = "model_response_started"
+
+
+@dataclass(frozen=True)
+class ModelResponseDelta:
+    episode_index: int
+    turn_index: int
+    role: Role
+    response_id: str
+    text: str
+    at_s: float
+    kind: Literal["model_response_delta"] = "model_response_delta"
+
+
+@dataclass(frozen=True)
+class ModelResponseFinished:
+    episode_index: int
+    turn_index: int
+    role: Role
+    response_id: str
+    status: ResponseStatus
+    at_s: float
+    error: str | None = None
+    kind: Literal["model_response_finished"] = "model_response_finished"
+
+
+@dataclass(frozen=True)
+class ModelResponseView:
+    response_id: str
+    model: str
+    episode_index: int
+    turn_index: int
+    text: str = ""
+    status: ResponseStatus = "streaming"
+    error: str | None = None
+
+
+@dataclass(frozen=True)
 class ProbeStarted:
     episode_index: int
     at_s: float
@@ -139,7 +192,11 @@ class JobError:
 
 
 JobEvent: TypeAlias = (
-    RestoreStarted
+    ResponseArchiveOpened
+    | ModelResponseStarted
+    | ModelResponseDelta
+    | ModelResponseFinished
+    | RestoreStarted
     | RestoreFinished
     | TurnStarted
     | TurnEnded
@@ -182,6 +239,9 @@ class JobSnapshot:
     last_tool_role: Role | None = None
     error: str | None = None
     last_terminal: TerminalOutcome | None = None
+    attacker_response: ModelResponseView | None = None
+    defender_response: ModelResponseView | None = None
+    responses_path: str | None = None
 
     @property
     def active_role(self) -> Role | None:
@@ -225,9 +285,13 @@ def apply(snapshot: JobSnapshot, event: JobEvent) -> JobSnapshot:
     if snapshot.phase is Phase.FAILED and event.kind != "error":
         raise InvalidTransition("job already failed")
     recent = _bounded(snapshot.recent + (event,), EVENT_LIMIT)
-    log = _bounded(snapshot.log + (_log_line(event),), LOG_LIMIT)
+    log = snapshot.log if isinstance(event, ModelResponseDelta) else _bounded(snapshot.log + (_log_line(event),), LOG_LIMIT)
     base = replace(snapshot, recent=recent, log=log)
     match event:
+        case ResponseArchiveOpened():
+            return replace(base, responses_path=event.path)
+        case ModelResponseStarted() | ModelResponseDelta() | ModelResponseFinished():
+            return _model_response(base, event)
         case RestoreStarted():
             return _restore_started(base, event)
         case RestoreFinished():
@@ -247,9 +311,36 @@ def apply(snapshot: JobSnapshot, event: JobEvent) -> JobSnapshot:
         case JobEnded():
             return _job_ended(base, event)
         case JobError():
-            return replace(base, phase=Phase.FAILED, error=event.message)
+            responses = {}
+            for field in ("attacker_response", "defender_response"):
+                current = getattr(base, field)
+                if current is not None and current.status == "streaming":
+                    responses[field] = replace(current, status="cancelled" if event.operation == "cancel" else "error", error=event.message)
+            return replace(base, phase=Phase.FAILED, error=event.message, **responses)
         case _:
             _assert_never(event)
+
+
+def _model_response(snapshot: JobSnapshot, event) -> JobSnapshot:
+    _require_episode(snapshot, event.episode_index)
+    if snapshot.active_role is not event.role or snapshot.turn_index != event.turn_index:
+        raise InvalidTransition("response does not match active turn")
+    field = "attacker_response" if event.role is Role.ATTACKER else "defender_response"
+    current = getattr(snapshot, field)
+    if isinstance(event, ModelResponseStarted):
+        if current is not None and current.status == "streaming":
+            raise InvalidTransition("previous model response still streaming")
+        current = ModelResponseView(event.response_id, event.model, event.episode_index, event.turn_index)
+    else:
+        if current is None or current.response_id != event.response_id or current.status != "streaming":
+            raise InvalidTransition("response event has no matching active response")
+        if isinstance(event, ModelResponseDelta):
+            current = replace(current, text=current.text + event.text)
+        else:
+            if event.status == "streaming":
+                raise InvalidTransition("finished response needs a terminal status")
+            current = replace(current, status=event.status, error=event.error)
+    return replace(snapshot, **{field: current})
 
 
 def _bounded(items: tuple, limit: int) -> tuple:
@@ -279,6 +370,8 @@ def _restore_started(snapshot: JobSnapshot, event: RestoreStarted) -> JobSnapsho
         defender_tools=0,
         last_attacker="waiting",
         last_defender="waiting",
+        attacker_response=None,
+        defender_response=None,
         turn_index=None,
     )
 
@@ -406,6 +499,14 @@ def _tool_label(tool: ToolEvent) -> str:
 def _log_line(event: JobEvent) -> str:
     stamp = _fmt_clock(getattr(event, "at_s", 0.0))
     match event:
+        case ResponseArchiveOpened():
+            return f"{stamp}  responses {event.path}"
+        case ModelResponseStarted():
+            return f"{stamp}  {event.role.value} response started  {event.model}"
+        case ModelResponseDelta():
+            return ""
+        case ModelResponseFinished():
+            return f"{stamp}  {event.role.value} response {event.status}"
         case RestoreStarted():
             return f"{stamp}  restore {event.guest_id}  {event.image_ref}"
         case RestoreFinished():

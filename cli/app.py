@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 from queue import Empty, Queue
+from time import monotonic
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -17,6 +18,7 @@ from ultron.cli.render import (
     footer_line,
     header_line,
     progress_block,
+    response_block,
     sandbox_pane,
     transcript_entry,
     transcript_header,
@@ -70,21 +72,27 @@ class SimApp(App[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="frame"):
-            yield Static(id="header")
+            yield Static(id="header", markup=False)
             with Horizontal(id="arena"):
-                yield HotPane("attacker", id="attacker")
-                yield HotPane("sandbox", id="sandbox")
-                yield HotPane("defender", id="defender")
-            yield Static(id="detail")
-            yield Static(id="transcript-header")
-            yield RichLog(id="log", highlight=False, markup=True, wrap=True)
-            yield Static(id="progress")
-            yield Static(id="status")
+                yield HotPane("attacker", id="attacker", markup=False)
+                yield HotPane("sandbox", id="sandbox", markup=False)
+                yield HotPane("defender", id="defender", markup=False)
+            yield Static(id="detail", markup=False)
+            yield Static(id="response", markup=False)
+            yield Static(id="transcript-header", markup=False)
+            yield RichLog(id="log", highlight=False, markup=True, wrap=True, max_lines=5000, min_width=1)
+            yield Static(id="progress", markup=False)
+            yield Static(id="status", markup=False)
 
     def on_mount(self) -> None:
         self.query_one("#detail", Static).display = False
+        self.query_one("#response", Static).display = False
         self.set_interval(0.05, self._drain)
         self._paint()
+
+    def on_resize(self) -> None:
+        if self.query("#header"):
+            self._paint()
 
     def action_expand(self, pane: str) -> None:
         self.expanded = pane
@@ -110,7 +118,11 @@ class SimApp(App[None]):
     def _drain(self) -> None:
         drained = False
         log = self.query_one("#log", RichLog)
-        while True:
+        # Yield to input and painting even when the producer stays ahead of us.
+        deadline = monotonic() + 0.015
+        for _ in range(256):
+            if monotonic() >= deadline:
+                break
             try:
                 item = self.events.get_nowait()
             except Empty:
@@ -125,24 +137,31 @@ class SimApp(App[None]):
                 if self.snapshot.phase in (Phase.COMPLETE, Phase.FAILED):
                     break
                 self.snapshot = replace(self.snapshot, phase=Phase.FAILED, error=str(exc))
-            log.write(transcript_entry(item))
+            entry = transcript_entry(item, self.snapshot)
+            if entry:
+                log.write(entry)
         if drained:
             self._paint()
 
     def _paint(self) -> None:
         snap = self.snapshot
+        response = self.query_one("#response", Static)
+        content = response_block(snap, width=max(20, self.size.width - 8))
+        response.display = bool(content) and self.expanded is None
+        response.update(content)
         self.query_one("#header", Static).update(header_line(snap))
         self.query_one("#transcript-header", Static).update(transcript_header(snap))
         self.query_one("#progress", Static).update(progress_block(snap))
         self.query_one("#status", Static).update(footer_line(snap, sim=self.sim))
         arena = self.query_one("#arena", Horizontal)
         detail = self.query_one("#detail", Static)
+        detail.styles.height = min(9, max(4, self.size.height // 4))
         if self.expanded:
             arena.display = False
             detail.display = True
             detail.update(detail_block(snap, self.expanded))
         else:
-            arena.display = True
+            arena.display = self.size.height >= 32
             detail.display = False
             self.query_one("#attacker", HotPane).update(attacker_pane(snap))
             self.query_one("#sandbox", HotPane).update(sandbox_pane(snap))

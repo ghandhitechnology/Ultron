@@ -189,7 +189,39 @@ exec_attach() {
   if ! has_session "${session}"; then
     die "Session not found: ${session}"
   fi
-  exec tmux -L "$(socket_name "${session}")" -f "${CONF}" attach-session -t "=${session}"
+  local temporary_root
+  temporary_root="$(effective_tmux_tmpdir)"
+  mkdir -p "${temporary_root}"
+  chmod 700 "${temporary_root}"
+  exec env TMUX_TMPDIR="${temporary_root}" \
+    tmux -L "$(socket_name "${session}")" -f "${CONF}" attach-session -t "=${session}"
+}
+
+terminate_session_processes() {
+  local session="$1" pane_pids pid alive attempt
+  pane_pids="$(tmux_cmd "${session}" list-panes -t "=${session}" -F '#{pane_pid}')"
+  for pid in ${pane_pids}; do
+    if [[ "${pid}" =~ ^[1-9][0-9]*$ && "${pid}" != "$$" ]]; then
+      kill -TERM -- "-${pid}" 2>/dev/null || true
+    fi
+  done
+
+  for attempt in {1..50}; do
+    alive=0
+    for pid in ${pane_pids}; do
+      if [[ "${pid}" =~ ^[1-9][0-9]*$ ]] && kill -0 -- "-${pid}" 2>/dev/null; then
+        alive=1
+      fi
+    done
+    [[ "${alive}" -eq 0 ]] && return 0
+    sleep 0.1
+  done
+
+  for pid in ${pane_pids}; do
+    if [[ "${pid}" =~ ^[1-9][0-9]*$ && "${pid}" != "$$" ]]; then
+      kill -KILL -- "-${pid}" 2>/dev/null || true
+    fi
+  done
 }
 
 cmd_stop() {
@@ -201,6 +233,9 @@ cmd_stop() {
   require_tmux
   if ! has_session "${session}"; then
     die "Session not found: ${session}"
+  fi
+  if ! session_is_dead "${session}"; then
+    terminate_session_processes "${session}"
   fi
   tmux_cmd "${session}" kill-server
   echo "Stopped ${session}"
