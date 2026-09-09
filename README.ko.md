@@ -44,6 +44,8 @@ flowchart LR
 
 처음부터 모든 코드를 읽을 필요는 없습니다. 실험 콘솔인 `ultron-sim`에서 작업을 선택하고, 라이브 게스트 짐인 `ultron-sim demo`에서 에피소드의 흐름을 살펴볼 수 있습니다. 두 화면을 사용하려면 먼저 `pip install -e '.[tui]'`로 TUI 의존성을 설치합니다. 전체 설치 순서는 영문 README를 참고하세요.
 
+같은 배틀 화면을 브라우저에서 볼 수도 있습니다. `pip install -e '.[web]'`으로 웹 의존성을 설치한 뒤 `ultron preview`를 실행하면 데모 배틀 뷰가 웹 서버로 뜨고, 기본 포트는 8008입니다. 접속한 브라우저 세션마다 각자의 데모 실행이 배정되며, 실행 결과는 평소와 같이 `data/responses`에 기록됩니다.
+
 <p align="center">
   <img src="docs/screenshots/console_catalog.png" alt="실험 콘솔의 작업 목록. Full generation을 선택한 상태로 세대 0과 에피소드 2048이 표시되어 있습니다." width="900" />
 </p>
@@ -270,7 +272,7 @@ Ultron은 여러 연구에서 아이디어를 가져왔지만, 어느 한 논문
 - `env/`: 게스트 실행과 검증을 맡습니다. 격리 백엔드 인터페이스 (`backend.py`), Docker 백엔드 (`docker_backend.py`), libvirt/KVM 설정 (`libvirt/`), vsock RPC 클라이언트 (`guest_agent_client.py`), 게스트 데몬 (`guest-agent/`), 호스트 프로브 (`probes.py`), 가용성 검사 (`availability.py`), 스냅샷 검증 (`snapshot.py`), VM 풀 (`vm_pool.py`)을 포함합니다.
 - `harness/`: Pi 세션과 도구 실행 환경, 턴 교대 흐름을 연결하는 TypeScript 코드입니다. `execution_env.ts`, `turn_clock.ts`, `session_factory.ts`, `models.json`에서 인터페이스와 설정을 확인할 수 있습니다.
 - `eval/`: 평가 계획과 연동 코드를 모았습니다. Tier-3 평가 계획 (`run_tier3.py`), 테스트 이후 아카이브 가중치의 공개 벤치마크 평가 (`benchmarks.py`, `run_benchmarks.py`), 절차적 템플릿 (`procedural/`), InterCode 연동 (`intercode/`), ReAct 베이스라인 (`react_baseline.py`)이 있습니다.
-- `cli/`: Textual 기반 실험 콘솔 `ultron-sim` (`ultron-sim console`)과 라이브 게스트 짐 `ultron-sim demo`를 구현합니다.
+- `cli/`: Textual 기반 실험 콘솔 `ultron-sim` (`ultron-sim console`), 라이브 게스트 짐 `ultron-sim demo`, 브라우저 미리보기 서버 `ultron preview`를 구현합니다.
 - `configs/`: 기본 모델·학습·평가 설정과 `configs/families/` 아래의 패밀리별 설정을 관리합니다.
 - `scripts/`: 베어메탈·클라우드 부트스트랩, tmux 작업 관리, vLLM 서빙, 롤아웃 워커, GRPO/DPO 학습, 세대별 파이프라인 실행을 연결합니다.
 

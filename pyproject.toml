@@ -14,6 +14,7 @@ dependencies = ["PyYAML>=6.0"]
 dev = ["pytest>=8.0"]
 parquet = ["pyarrow>=15.0"]
 tui = ["textual>=0.80"]
+web = ["textual>=0.80", "textual-serve>=1.1"]
 
 [project.scripts]
 ultron = "ultron.cli.main:main"

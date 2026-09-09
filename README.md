@@ -75,7 +75,7 @@ Do not place guest images, traces, model weights, credentials, or checkpoints in
 - `eval/` defines tier-3 evaluation plans and runner (`run_tier3.py`), post-test public benchmark scoring of archived attacker and defender weights (`benchmarks.py`, `run_benchmarks.py`, `plot.py`), procedural template generators (`procedural/`), InterCode evaluation adapters (`intercode/`), Debian 12 zero-shot build scripts (`debian12/`), and ReAct baseline scaffolding (`react_baseline.py`).
 - `configs/` records locked model (`model.yaml`), host/VM topology (`bm-gpu.yaml`), generation loops (`generation.yaml`), training algorithms (`train_grpo.yaml`, `train_dpo.yaml`), evaluation plans (`eval_tier3.yaml`, `eval_benchmarks.yaml`), and selectable model family packs under `families/`.
 - `scripts/` contains host environment bootstrap gates (`bootstrap_bm.sh`, `bootstrap_cloud.sh`), model-fit preflight (`lib_capability.sh`), tmux lifecycle management (`tmux_job.sh`, `lib_tmux.sh`), model family environment loader (`lib_family.sh`), vLLM role servers (`serve_vllm_attacker.sh`, `serve_vllm_defender.sh`), rollout worker (`rollout_worker.sh`), adapter resolution (`resolve_adapter.sh`), training entry points (`train_grpo.sh`, `train_dpo.sh`), full generation loop orchestrator (`run_generation.sh`), unit tests plus post-test archived-weight benchmarks (`run_tests.sh`, `run_benchmarks.sh`), and weight archiver (`archive_weights.sh`).
-- `cli/` is the experiment console (`ultron-sim` / `ultron-sim console`) and live guest-gym dashboard (`ultron-sim demo`). Built with Textual, it provides interactive job launching across actions (demo, generation, rollout, GRPO, DPO, serve, review, archive, eval, tests), real-time tmux monitoring, review report viewing, and live simulation of agent-sandbox interactions.
+- `cli/` is the experiment console (`ultron-sim` / `ultron-sim console`), live guest-gym dashboard (`ultron-sim demo`), and browser preview server (`ultron preview`). Built with Textual, it provides interactive job launching across actions (demo, generation, rollout, GRPO, DPO, serve, review, archive, eval, tests), real-time tmux monitoring, review report viewing, and live simulation of agent-sandbox interactions.
 - `prompts/` contains attacker and defender system instructions (`attacker_system.md`, `defender_system.md`) and per-profile research goals (`goals/profiles.yaml`).
 
 ## Long-running jobs
@@ -205,6 +205,17 @@ Click a pane (or press `a` / `s` / `d` / `t`) to expand detail. The demo drives 
 The gym shows model text as response chunks arrive. A live panel keeps the latest response from each role visible, and completed responses appear in the scrolling transcript. Page Up pauses automatic scrolling; End returns to the newest output. Expand either role to read its latest response.
 
 Each observed run creates `data/responses/<run-id>/responses.json`, including model names, roles, episode and turn indexes, response text, and completion or error status. Failed and cancelled runs retain partial responses. Use `ultron-sim demo --responses-dir /path/to/responses` to choose another directory. The CLI prints the saved path when the view closes.
+
+### Web preview
+
+`ultron preview` serves the same battle view in a browser, so you can watch a demo run from another machine:
+
+```bash
+python -m pip install -e '.[web]'
+ultron preview --port 8008
+```
+
+The server binds all interfaces on port 8008 by default; open `http://<host>:8008`. Every connected browser gets its own demo run with the `--episodes`, `--turns-per-side`, `--generation`, `--profile`, `--delay`, and `--responses-dir` options shared with `ultron demo`, and each run writes its responses archive as usual.
 
 `ultron battle` opens the live response viewer. The standard serving scripts capture model responses automatically on the existing client ports, 8001 and 8002. They supervise vLLM behind the recorder on ports 8101 and 8102. Each model request gets a separate response archive, so concurrent calls retain their own text and status. Closing the viewer leaves serving and recording running.
 
