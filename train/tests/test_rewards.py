@@ -2,6 +2,7 @@ from ultron.train.rewards import (
     assign_gen01_attacker_turn_rewards,
     assign_terminal_rtg,
     format_gate,
+    return_to_go,
     total_gated_reward,
 )
 from ultron.train.schema_v1 import Role, TrajectoryStep
@@ -20,14 +21,15 @@ def step(*, hits: list[str] | None = None, valid: bool = True) -> TrajectoryStep
     )
 
 
-def test_subgoals_reward_only_first_hit() -> None:
+def test_subgoals_share_the_episode_cap() -> None:
     steps = [
         step(hits=["suid_bin_found"]),
         step(hits=["suid_bin_found", "shell_spawned"]),
         step(hits=["unknown"]),
     ]
     assign_gen01_attacker_turn_rewards(steps)
-    assert [item.turn_reward for item in steps] == [0.1, 0.1, 0.0]
+    assert [item.turn_reward for item in steps] == [0.05, 0.05, 0.0]
+    assert sum(item.turn_reward for item in steps) == 0.1
 
 
 def test_terminal_reward_and_format_gate() -> None:
@@ -37,3 +39,7 @@ def test_terminal_reward_and_format_gate() -> None:
     assert format_gate(steps) == 1.0
     steps[0].format_valid = False
     assert total_gated_reward(steps) == 0.0
+
+
+def test_return_to_go_is_suffix_sum() -> None:
+    assert return_to_go([0.1, 0.0, 1.0]) == [1.1, 1.0, 1.0]

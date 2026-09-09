@@ -26,6 +26,9 @@ class FamilyName(str, Enum):
     GEMMA_ABLITERATED = "gemma-abliterated"
 
 
+DEFAULT_FAMILY = FamilyName.QWEN_8B
+
+
 class FamilyError(ValueError):
     """Boundary failure for family selection or pack integrity."""
 
@@ -116,7 +119,7 @@ def resolve(
 ) -> FamilyPack:
     """Select, load, and validate one family pack.
 
-    Precedence: explicit `name` > environ ULTRON_MODEL_FAMILY > qwen-4b.
+    Precedence: explicit `name` > environ ULTRON_MODEL_FAMILY > qwen-8b.
     Empty / whitespace-only env is treated as unset.
     """
     root = Path(__file__).resolve().parent.parent if repo_root is None else Path(repo_root)
@@ -193,7 +196,7 @@ def _select_name(name: FamilyName | str | None, environ: Mapping[str, str]) -> F
         return parse_family_name(name)
     raw = environ.get("ULTRON_MODEL_FAMILY")
     if raw is None or not raw.strip():
-        return FamilyName.QWEN_4B
+        return DEFAULT_FAMILY
     return parse_family_name(raw)
 
 

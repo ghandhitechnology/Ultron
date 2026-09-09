@@ -62,8 +62,8 @@ def test_generation_plan_sets_episode_env() -> None:
     assert built.session == "ultron-gen-3"
     assert built.argv[-1] == "3"
     assert ("ULTRON_EPISODES", "16") in built.env
-    assert ("ULTRON_MODEL_FAMILY", "qwen-4b") in built.env
-    assert built.argv[1:3] == ("--family", "qwen-4b")
+    assert ("ULTRON_MODEL_FAMILY", "qwen-8b") in built.env
+    assert built.argv[1:3] == ("--family", "qwen-8b")
 
 
 def test_family_pin_follows_the_selector() -> None:
@@ -142,7 +142,7 @@ def test_all_tests_score_archives_after_pytest() -> None:
     assert isinstance(built, ForegroundPlan)
     assert built.argv[0].endswith("run_tests.sh")
     assert built.argv[-1] == "all"
-    assert ("ULTRON_MODEL_FAMILY", "qwen-4b") in built.env
+    assert ("ULTRON_MODEL_FAMILY", "qwen-8b") in built.env
 
 
 def test_benchmarks_plan_reads_archives_only() -> None:
@@ -151,7 +151,7 @@ def test_benchmarks_plan_reads_archives_only() -> None:
     assert "--archive-dir" in built.argv
     assert "--checkpoint-root" not in built.argv
     assert "--all" in built.argv
-    assert any(str(part).endswith("data/archives") for part in built.argv)
+    assert any(str(part).endswith("data/families/qwen-8b/archives") for part in built.argv)
     execute = plan(ActionId.BENCHMARKS, {"execute": "true", "all_generations": "false", "generation": "3"}, root=ROOT)
     assert isinstance(execute, TmuxPlan)
     assert execute.session == "ultron-bench-gen3"

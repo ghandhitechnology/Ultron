@@ -154,5 +154,5 @@ def test_publish_final_keeps_previous_adapters_when_staging_fails(tmp_path: Path
 def test_default_resolve_reads_repo_model_yaml() -> None:
     pack = resolve(environ={})
     assert pack.model_config.name == "model.yaml"
-    assert pack.model_config.parent.name == "configs"
-    assert pack.base_model == "Qwen/Qwen3.5-4B"
+    assert pack.model_config.parent.name == "qwen-8b"
+    assert pack.base_model == "Qwen/Qwen3-8B"

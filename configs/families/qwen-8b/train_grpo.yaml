@@ -1,7 +1,7 @@
 algorithm:
   adv_estimator: grpo
   role_aware_baseline:
-    enabled: true
+    enabled: false
     alpha: 0.95
 data:
   train_batch_size: 64

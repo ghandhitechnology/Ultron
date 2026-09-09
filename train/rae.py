@@ -22,10 +22,17 @@ class RoleAwareBaseline:
 
 
 def group_centered_advantages(
-    rewards: list[float], role: Role, baseline: RoleAwareBaseline
+    rewards: list[float],
+    role: Role | None = None,
+    baseline: RoleAwareBaseline | None = None,
 ) -> list[float]:
     if not rewards:
         return []
-    adjusted = [baseline.advantage(role, reward) for reward in rewards]
-    mean = sum(adjusted) / len(adjusted)
-    return [value - mean for value in adjusted]
+    if baseline is None:
+        values = rewards
+    else:
+        if role is None:
+            raise ValueError("role is required when a role-aware baseline is supplied")
+        values = [baseline.advantage(role, reward) for reward in rewards]
+    mean = sum(values) / len(values)
+    return [value - mean for value in values]

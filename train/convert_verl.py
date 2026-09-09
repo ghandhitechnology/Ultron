@@ -7,22 +7,29 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterable
 
-from .rewards import format_gate
+from .rewards import format_gate, return_to_go
 from .io import atomic_write_text
-from .schema_v1 import TrajectoryV1
+from .schema_v1 import ReasonCode, TrajectoryV1
 
 
-def trajectory_to_verl_records(traj: TrajectoryV1, generation: int) -> list[dict[str, Any]]:
+def trajectory_to_verl_records(
+    traj: TrajectoryV1, generation: int, *, behavior_policy_id: str = ""
+) -> list[dict[str, Any]]:
     traj.validate()
+    if traj.terminal.reason_code is ReasonCode.INFRA_FAIL:
+        return []
     if not traj.steps:
         raise ValueError("cannot convert an empty trajectory")
     gate = format_gate(traj.steps)
+    rewards = [step.turn_reward * gate for step in traj.steps]
+    returns = return_to_go(rewards)
+    policy = behavior_policy_id or traj.adapter_id
     return [
         {
             "prompt": step.prompt_token_ids,
             "response": step.assistant_token_ids,
             "assistant_mask": step.assistant_mask,
-            "reward": step.turn_reward * gate,
+            "reward": reward,
             "data_source": "ultron",
             "extra_info": {
                 "turn_index": step.turn_index,
@@ -32,9 +39,11 @@ def trajectory_to_verl_records(traj: TrajectoryV1, generation: int) -> list[dict
                 "adapter_id": traj.adapter_id,
                 "opponent_checkpoint_id": traj.opponent_checkpoint_id,
                 "generation": generation,
+                "return_to_go": ret,
+                "behavior_policy_id": policy,
             },
         }
-        for step in traj.steps
+        for step, reward, ret in zip(traj.steps, rewards, returns, strict=True)
     ]
 
 

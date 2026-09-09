@@ -26,6 +26,7 @@ class ReasonCode(str, Enum):
     ATTACKER_ROOT = "ATTACKER_ROOT"
     DEFENDER_HOLD = "DEFENDER_HOLD"
     TIMEOUT = "TIMEOUT"
+    HANG = "HANG"
     INFRA_FAIL = "INFRA_FAIL"
     AVAILABILITY_FAIL = "AVAILABILITY_FAIL"
 
@@ -69,6 +70,9 @@ class TerminalOutcome:
     availability_ok: bool
     attacker_reward: float
     defender_reward: float
+    recovered: bool = False
+    unresolved: bool = False
+    ordinary_user_ok: bool = True
 
 
 @dataclass
@@ -204,6 +208,9 @@ def _terminal_from_dict(raw: Any) -> TerminalOutcome:
         availability_ok=_bool(data.get("availability_ok"), "availability_ok"),
         attacker_reward=_float(data.get("attacker_reward"), "attacker_reward"),
         defender_reward=_float(data.get("defender_reward"), "defender_reward"),
+        recovered=_bool(data.get("recovered", False), "recovered"),
+        unresolved=_bool(data.get("unresolved", False), "unresolved"),
+        ordinary_user_ok=_bool(data.get("ordinary_user_ok", True), "ordinary_user_ok"),
     )
 
 

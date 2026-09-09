@@ -1,0 +1,89 @@
+protocol_version: final-study.v1
+hypothesis: >
+  Adaptive self-play improves both attacker and defender performance on unseen
+  security mechanisms at matched total GPU cost.
+target_delta_pp: 5
+primary_method: grpo_verified_shaping
+shaping_cap: 0.1
+terminal_win: 1.0
+role_aware_baseline: false
+thinking:
+  enable_thinking: true
+default_family: qwen-8b
+secondary_family: qwen-4b
+isolation: kvm
+prep_turns: null
+prep_turns_calibrated: false
+curriculum_frozen: false
+final_test_sealed: true
+development_separate: true
+spending_cap_required: true
+warm_start:
+  if_no_learning_signal: shared_verified_supervised
+  include_warm_start_only_control: true
+adaptive_mix:
+  latest: 0.5
+  difficult: 0.25
+  uniform: 0.25
+eval:
+  opponent_panel: independently_trained_frozen
+  roles_separate: true
+  pi_cross_runtime: true
+  public_benchmarks: secondary
+  splits: [unseen_instance, unseen_combination, held_out_mechanism]
+  report: [uncertainty, completion_rate, gpu_hours, tokens, env_interactions]
+seed_count: null
+models:
+  qwen-8b:
+    methods: [fixed-single, fixed-diverse, adaptive-latest, adaptive-history]
+    control: [untrained]
+    ablations:
+      methods: [fixed-diverse, adaptive-history]
+      kinds: [shaping-off, added-dpo]
+  qwen-4b:
+    methods: [fixed-diverse, adaptive-history]
+    control: [untrained]
+    ablations:
+      methods: []
+      kinds: []
+tasks:
+  train:
+    - id: suid_helper
+      mechanisms: [suid_helper]
+      kind: isolated
+    - id: writable_cron
+      mechanisms: [writable_cron]
+      kind: isolated
+    - id: suid_and_cron
+      mechanisms: [suid_helper, writable_cron]
+      kind: combination
+  development:
+    - id: dev_writable_tmp
+      mechanisms: [writable_tmp]
+      kind: isolated
+  final_test:
+    unseen_instance:
+      - id: suid_helper_unseen
+        mechanisms: [suid_helper]
+        kind: isolated
+    unseen_combination:
+      - id: suid_cron_unseen
+        mechanisms: [suid_helper, writable_cron]
+        kind: combination
+    held_out_mechanism:
+      - id: jump
+        mechanisms: [jump]
+        kind: isolated
+      - id: hardened-server
+        mechanisms: [hardened-server]
+        kind: isolated
+gates:
+  - known_solvable
+  - known_patched
+  - false_root_proof
+  - verifier_tamper
+  - metadata_leak
+  - dummy_service
+  - ordinary_user_access
+  - e2e_policy_update
+  - matched_gpu_hours
