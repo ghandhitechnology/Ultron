@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Protocol
 from uuid import uuid4
 
@@ -96,16 +96,7 @@ class EpisodeRunner:
 
         probe = self.final_probe(vm, profile)
         if hung and not probe.hung:
-            probe = ProbeResult(
-                guest_attacker_euid=probe.guest_attacker_euid,
-                host_confirmed_root=probe.host_confirmed_root,
-                availability_ok=probe.availability_ok,
-                infra_ok=probe.infra_ok,
-                timed_out=probe.timed_out,
-                hung=True,
-                ordinary_user_ok=probe.ordinary_user_ok,
-                recovered=probe.recovered,
-            )
+            probe = replace(probe, hung=True)
         reason, attacker_reward, defender_reward = adjudicate(probe)
         recovered = False
         if compromise is not None:
