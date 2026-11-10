@@ -162,6 +162,7 @@ def instrument_runner(
         final_probe=final_probe,
         restore=restore,
         turns_per_side=runner.turns_per_side,
+        turn_probe=runner.turn_probe,
     )
 
 

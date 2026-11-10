@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -115,6 +117,15 @@ class RunIdentity:
     seed: int
     run_id: str
 
+    def __post_init__(self) -> None:
+        if self.protocol_version != PROTOCOL_VERSION:
+            raise StudyError("run protocol version does not match the study")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
+            raise StudyError("run seed must be a non-negative integer")
+        for name, value in (("model", self.model), ("variant", self.variant), ("run_id", self.run_id)):
+            if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+\-]*", value):
+                raise StudyError(f"{name} must be a safe, nonempty path component")
+
     def namespace(self) -> Path:
         return (
             Path("data/study")
@@ -213,8 +224,8 @@ def assert_paid_execution_allowed(
     locked = protocol or load_protocol()
     if locked.spending_cap_required and spending_cap_usd is None:
         raise ExecutionGateError("paid execution requires an approved spending cap")
-    if spending_cap_usd is not None and spending_cap_usd <= 0:
-        raise ExecutionGateError("spending cap must be positive")
+    if spending_cap_usd is not None and (not math.isfinite(spending_cap_usd) or spending_cap_usd <= 0):
+        raise ExecutionGateError("spending cap must be positive and finite")
     if isolation is not None and isolation is not locked.isolation:
         raise ExecutionGateError(
             f"final study requires {locked.isolation.value} guests, not {isolation.value}"

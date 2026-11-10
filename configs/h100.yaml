@@ -1,0 +1,35 @@
+profile: h100-pair-v1
+hardware:
+  gpu_model: NVIDIA H100 80GB
+  gpu_count: 2
+  gpu_memory_gb: 80
+  devices: [0, 1]
+  min_physical_cpu_cores: 32
+  min_host_memory_gb: 192
+  min_nvme_gb: 1000
+  guest_backend: kvm
+serving:
+  replicas: 2
+  tensor_parallel_size: 1
+  max_model_len: 32768
+  max_lora_rank: 64
+  max_loras: 8
+  max_num_seqs: 64
+  max_num_batched_tokens: 16384
+  enable_prefix_caching: true
+  gpu_memory_utilization: 0.85
+rollout:
+  workers: 16
+  pilot_episodes: 240
+  complete_groups: true
+training:
+  gpus: 2
+  use_dynamic_bsz: true
+  use_remove_padding: true
+  max_token_len_per_gpu: 16384
+billing:
+  currency: KRW
+  # Enter the actual booked instance rate, including every allocated GPU.
+  instance_hourly_rate: null
+  source: null
+  observed_at: null

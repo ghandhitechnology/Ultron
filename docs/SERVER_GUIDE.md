@@ -10,13 +10,13 @@ Use a single-tenant x86-64 server with:
 
 - Ubuntu 22.04 LTS or 24.04 LTS on the host.
 - Native KVM exposed as `/dev/kvm`. Nested virtualization is unsupported.
-- At least two NVIDIA GPUs with 80 GB VRAM each. H100 80 GB and A100 80 GB are the expected baseline.
+- Two NVIDIA H100 80 GB GPUs for the study baseline in `configs/h100.yaml`.
 - At least 32 physical CPU cores for 16 guests at 2 vCPU each, plus cores for the host and model workers. 64 or more physical cores is safer.
 - At least 128 GB host RAM. The guest allocation alone is 64 GB.
 - Fast local NVMe with room for the base image, 16 overlays, model cache, traces, and checkpoints. Budget at least 1 TB.
 - Administrative shell access and permission to configure libvirt, firewall rules, and NVIDIA drivers.
 
-Do not reserve GPUs for guests. Guests are CPU-only. Rollout uses two GPUs for two vLLM servers. Training reuses two to four GPUs after both vLLM processes stop.
+Guests use CPU resources. Rollout uses one vLLM replica on each H100, with both roles available on each replica. Training reuses the same two GPUs after the serving supervisor stops both workers. See [H100 execution](H100_EXECUTION.md) for study identities, runtime adapters, and allocated-time accounting.
 
 Before renting a long-lived node, confirm that the provider exposes native `/dev/kvm`. The first paid-hour gate is a throwaway Ubuntu 18.04 guest boot.
 
@@ -304,25 +304,24 @@ Pass when 100 no-training episodes finish, every terminal has a reason code, ASR
 
 ### M5: GRPO smoke
 
-Start both vLLM endpoints, complete a small rollout, stop both servers, and run 10 GRPO optimizer steps for each role. Confirm `use_dynamic_bsz: false`, finite loss, LoRA rank 64, and `task_type: CAUSAL_LM` in exported adapter configuration.
+Start both vLLM endpoints, complete a small rollout, stop both servers, and run a bounded GRPO update for each role through the recorded-trajectory adapter. Compare packed and unpacked updates using the same tokens, masks, group advantages, effective batches, and loss normalization. Confirm finite loss, LoRA rank 64, and `task_type: CAUSAL_LM` in the exported adapter configuration.
 
 Pass when both role adapters load back into vLLM and answer a canary request.
 
 ### M6: full generation loop
 
-Add valid attacker prefix-branch pairs from generation 2 onward. Keep one opponent checkpoint frozen for every GRPO group and maintain at most eight PFSP entries.
+Add valid attacker prefix-branch pairs from generation 2 onward for the added-DPO cells. Keep one opponent checkpoint frozen for every GRPO group and maintain at most eight PFSP entries.
 
-Run generation 0, inspect ASR after 200 rollouts, then finish the generation only if reward groups have variance. Continue through the configured generations:
+Run generation 0 and inspect complete-group reward variance at the early gate after 204 episodes. Binary ASR alone does not determine whether shaping provides a learning signal. Continue through four generations numbered 0 through 3:
 
 ```bash
 ./scripts/run_generation.sh 0
 ./scripts/run_generation.sh 1
 ./scripts/run_generation.sh 2
 ./scripts/run_generation.sh 3
-./scripts/run_generation.sh 4
 ```
 
-The generation-4 command exists for the locked full-eval hook. If your experiment counts four outer updates as generations 0 through 3, run the full evaluator explicitly after the fourth checkpoint and record that mapping.
+Generation 3 schedules the full evaluation plan after the fourth update. Generation 4 is rejected. The production tier-3 evaluator still requires its KVM adapter.
 
 Pass when checkpoints enter the PFSP manifest and each generation can serve its resulting adapters.
 

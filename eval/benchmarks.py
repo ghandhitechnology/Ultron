@@ -144,6 +144,7 @@ class BenchmarkJob:
     workdir: Path
     serve_hint: str
     metric: str
+    cache_context: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def cell_id(self) -> str:
@@ -156,11 +157,12 @@ class BenchmarkJob:
             "role": self.role.value,
             "stage": self.stage.to_dict(),
             "argv": list(self.argv),
-            "env": {key: value for key, value in self.env},
+            "env": {key: value for key, value in self.env if key != "OPENAI_API_KEY"},
             "cwd": self.cwd,
             "workdir": str(self.workdir),
             "serve_hint": self.serve_hint,
             "metric": self.metric,
+            "cache_context": dict(self.cache_context),
         }
 
 
@@ -333,6 +335,9 @@ def build_jobs(
                     workdir=workdir,
                     serve_hint=_serve_hint(stage, endpoint),
                     metric=spec.metric,
+                    cache_context={**dict(spec.options.get("cache_identity", {})),
+                                   "mode": mode.value, "options": dict(spec.options),
+                                   "agent": config.pier_agent if benchmark_id is BenchmarkId.DEEP_SWE else config.harbor_agent},
                 )
             )
     return jobs
@@ -390,15 +395,31 @@ def execute_jobs(
     *,
     timeout_s: int = 0,
     runner: Any = None,
+    bindings: Mapping[str, Any] | None = None,
+    cache_dir: Path | None = None,
+    workers: int = 1,
 ) -> list[ScoreRow]:
-    rows: list[ScoreRow] = []
-    for job in jobs:
+    from concurrent.futures import ThreadPoolExecutor
+    from .execution import execute_bound
+    if workers < 1:
+        raise BenchmarkError("evaluation workers must be positive")
+    if workers > 1 and bindings is None:
+        raise BenchmarkError("parallel evaluation requires immutable checkpoint bindings")
+    def execute(job: BenchmarkJob) -> ScoreRow:
         binary = job.argv[0] if job.argv else ""
         if runner is None and shutil.which(binary) is None:
-            rows.append(_status_row(job, ScoreStatus.HARNESS_MISSING, f"missing binary {binary}"))
-            continue
-        rows.append(_run_job(job, timeout_s=timeout_s, runner=runner))
-    return rows
+            return _status_row(job, ScoreStatus.HARNESS_MISSING, f"missing binary {binary}")
+        if bindings is None:
+            if runner is None:
+                return _status_row(job, ScoreStatus.FAILED, "checkpoint bindings are required for execution")
+            return _run_job(job, timeout_s=timeout_s, runner=runner)
+        try:
+            return execute_bound(job, bindings=dict(bindings), cache_dir=cache_dir,
+                                 run=lambda bound: _run_job(bound, timeout_s=timeout_s, runner=runner))
+        except (OSError, ValueError) as exc:
+            return _status_row(job, ScoreStatus.FAILED, str(exc))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(execute, jobs))
 
 
 def ingest_scores(path: Path, *, default_status: ScoreStatus = ScoreStatus.INGESTED) -> list[ScoreRow]:
@@ -442,12 +463,15 @@ def merge_scores(*groups: list[ScoreRow]) -> list[ScoreRow]:
     )
 
 
-def write_scores(rows: list[ScoreRow], output: Path) -> Path:
+def write_scores(rows: list[ScoreRow], output: Path, *, replace_current: bool = False) -> Path:
     output.mkdir(parents=True, exist_ok=True)
     path = output / SCORES_NAME
     previous: list[ScoreRow] = []
     if path.is_file():
         previous = ingest_scores(path, default_status=ScoreStatus.INGESTED)
+    if replace_current:
+        current = {(row.stage_label, row.role, row.benchmark) for row in rows}
+        previous = [row for row in previous if (row.stage_label, row.role, row.benchmark) not in current]
     merged = merge_scores(previous, rows)
     payload = {
         "rows": [row.to_dict() for row in merged],
@@ -516,7 +540,7 @@ def incomplete_arms(rows: list[ScoreRow]) -> tuple[str, ...]:
 
 def _suite_from_payload(payload: Mapping[str, Any]) -> SuiteConfig:
     mode_map: dict[int, EvalMode] = {}
-    raw_modes = payload.get("mode_by_generation", {2: "light", 4: "full"})
+    raw_modes = payload.get("mode_by_generation", {2: "light", 3: "full"})
     if isinstance(raw_modes, Mapping):
         for key, value in raw_modes.items():
             mode_map[int(key)] = parse_eval_mode(str(value))
@@ -903,10 +927,13 @@ def _job_command(
                 or options.get("dataset")
                 or TERMINAL_BENCH_DATASET
             )
+            local_tasks = mode_opts.get("tasks_path") or options.get("tasks_path")
+            if local_tasks:
+                dataset = str(Path(str(local_tasks)).expanduser().resolve())
             argv = [
                 spec.binary,
                 "run",
-                "-d",
+                "-p" if local_tasks else "-d",
                 dataset,
                 "--agent",
                 config.harbor_agent,
@@ -937,6 +964,8 @@ def _openai_env(endpoint: RoleEndpoint) -> tuple[tuple[str, str], ...]:
 
 
 def _serve_hint(stage: IterationStage, endpoint: RoleEndpoint) -> str:
+    if stage.train_stage == "untrained":
+        return f"python -m ultron.shared_serving --manifest <base-serving-manifest.json>  # base policy from {stage.adapter_path}"
     script = "serve_vllm_attacker.sh" if stage.role is Role.ATTACKER else "serve_vllm_defender.sh"
     env_name = "ULTRON_ATTACKER_ADAPTER" if stage.role is Role.ATTACKER else "ULTRON_DEFENDER_ADAPTER"
     return (
@@ -948,19 +977,16 @@ def _serve_hint(stage: IterationStage, endpoint: RoleEndpoint) -> str:
 def _write_job_script(job: BenchmarkJob) -> None:
     job.workdir.mkdir(parents=True, exist_ok=True)
     script = job.workdir / "run.sh"
-    exports = "\n".join(f"export {key}={_shell_single(value)}" for key, value in job.env)
-    command = " ".join(_shell_single(part) for part in job.argv)
-    cd_to = job.cwd or str(job.workdir)
     body = "\n".join(
         [
             "#!/usr/bin/env bash",
             "set -euo pipefail",
             f"# {job.cell_id}",
             f"# Serve first: {job.serve_hint}",
-            exports,
-            f"mkdir -p {_shell_single(str(job.workdir))}",
-            f"cd {_shell_single(cd_to)}",
-            command,
+            'exec "${ULTRON_PYTHON:-python3}" -m ultron.eval.execution '
+            f"--job {_shell_single(str((job.workdir / 'job.json').resolve()))} "
+            '--bindings "${ULTRON_EVAL_BINDINGS:?Set the immutable checkpoint bindings JSON}" '
+            f"--cache-dir {_shell_single(str((job.workdir / 'cache').resolve()))}",
             "",
         ]
     )

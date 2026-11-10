@@ -10,4 +10,8 @@ ultron_load_family() {
   exported="$(cd "${root}" && "${ULTRON_PYTHON}" -m ultron.train.family export)" || return 2
   # `export` persists outside this function and works on Bash 3 through Bash 5.
   eval "$(printf '%s\n' "${exported}" | sed 's/^declare -x /export /')"
+  if [[ -n "${ULTRON_RUN_ROOT:-}" ]]; then
+    exported="$(cd "${root}" && "${ULTRON_PYTHON}" -m ultron.train.pipeline export)" || return 2
+    eval "${exported}"
+  fi
 }

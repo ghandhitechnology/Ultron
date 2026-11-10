@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+import math
 from typing import Any, Mapping
 
 from ultron.env.backend import IsolationBackend
@@ -15,6 +16,12 @@ PROFILE_IDS = {
     "hardened-server",
     "workstation",
     "procedural",
+    "suid_helper",
+    "writable_cron",
+    "suid_and_cron",
+    "dev_writable_tmp",
+    "suid_helper_unseen",
+    "suid_cron_unseen",
 }
 
 
@@ -60,6 +67,7 @@ class TrajectoryStep:
     turn_reward: float = 0.0
     async_bash_pending: bool = False
     observation_hash: str = ""
+    behavior_log_probs: list[float] | None = None
 
 
 @dataclass
@@ -88,6 +96,8 @@ class TrajectoryV1:
     steps: list[TrajectoryStep]
     terminal: TerminalOutcome
     isolation_backend: IsolationBackend
+    behavior_policy_id: str = ""
+    trainable: bool = True
 
     def validate(self) -> None:
         if self.schema_version != SCHEMA_VERSION:
@@ -112,6 +122,13 @@ class TrajectoryV1:
                 raise SchemaError("assistant_mask values must be 0 or 1")
             if step.turn_index < 0:
                 raise SchemaError("turn_index must be non-negative")
+            if step.behavior_log_probs is not None:
+                if len(step.behavior_log_probs) != len(step.assistant_token_ids):
+                    raise SchemaError("behavior log probability and assistant token lengths differ")
+                if any(not math.isfinite(value) or value > 0 for value in step.behavior_log_probs):
+                    raise SchemaError("behavior log probabilities must be finite and non-positive")
+        if not isinstance(self.trainable, bool):
+            raise SchemaError("trainable must be a boolean")
 
     def to_dict(self) -> dict[str, Any]:
         self.validate()
@@ -155,6 +172,8 @@ class TrajectoryV1:
                 isolation_backend=IsolationBackend(
                     _str(data["isolation_backend"], "isolation_backend")
                 ),
+                behavior_policy_id=_str(data.get("behavior_policy_id", ""), "behavior_policy_id"),
+                trainable=_bool(data.get("trainable", True), "trainable"),
             )
         except (TypeError, ValueError) as exc:
             raise SchemaError(str(exc)) from exc
@@ -180,6 +199,12 @@ def _step_from_dict(raw: Any) -> TrajectoryStep:
         turn_reward=_float(data.get("turn_reward", 0.0), "turn_reward"),
         async_bash_pending=_bool(data.get("async_bash_pending", False), "async_bash_pending"),
         observation_hash=_str(data.get("observation_hash", ""), "observation_hash"),
+        behavior_log_probs=(
+            None if data.get("behavior_log_probs") is None else [
+                _float(value, "behavior_log_probs item")
+                for value in _list(data["behavior_log_probs"], "behavior_log_probs")
+            ]
+        ),
     )
 
 

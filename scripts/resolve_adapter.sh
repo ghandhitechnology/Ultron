@@ -14,6 +14,9 @@ if [[ "${ROLE}" != "attacker" && "${ROLE}" != "defender" ]]; then
   echo "usage: resolve_adapter.sh <attacker|defender> [generation]" >&2
   exit 2
 fi
+if [[ -n "${ULTRON_RUN_ROOT:-}" ]]; then
+  exec "${ULTRON_PYTHON}" -m ultron.train.training resolve --role "${ROLE}" --generation "${GEN}"
+fi
 
 if [[ "${ROLE}" == "attacker" && -n "${ULTRON_ATTACKER_ADAPTER:-}" ]]; then
   printf '%s\n' "${ULTRON_ATTACKER_ADAPTER}"
@@ -24,18 +27,9 @@ if [[ "${ROLE}" == "defender" && -n "${ULTRON_DEFENDER_ADAPTER:-}" ]]; then
   exit 0
 fi
 
-if [[ -x "${ARCHIVE_ROOT}/FINAL.sh" ]]; then
-  resolved="$("${ARCHIVE_ROOT}/FINAL.sh" "${ROLE}" 2>/dev/null || true)"
-  if [[ -n "${resolved}" && -f "${resolved}/adapter_config.json" ]]; then
-    printf '%s\n' "${resolved}"
-    exit 0
-  fi
-fi
-
 for candidate in \
-  "${ARCHIVE_ROOT}/final/${ROLE}_lora" \
   "${ARCHIVE_ROOT}/gen${GEN}/${ROLE}_lora" \
-  "${ARCHIVE_ROOT}/latest/${ROLE}_lora" \
+  "${CHECKPOINT_ROOT}/gen${GEN}/${ROLE}_lora/adapter" \
   "${CHECKPOINT_ROOT}/gen${GEN}/${ROLE}_lora"
 do
   if [[ -f "${candidate}/adapter_config.json" ]]; then

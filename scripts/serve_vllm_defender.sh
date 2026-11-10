@@ -40,6 +40,11 @@ exec env CUDA_VISIBLE_DEVICES="${ULTRON_DEFENDER_GPU:-1}" \
   --model "${ULTRON_PACK_BASE_MODEL}" \
   --enable-lora \
   --lora-modules "defender-lora=${ADAPTER}" \
+  --max-lora-rank 64 \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --max-num-seqs "${ULTRON_VLLM_MAX_NUM_SEQS:-64}" \
+  --max-num-batched-tokens "${ULTRON_VLLM_MAX_NUM_BATCHED_TOKENS:-16384}" \
   "${chat_kwargs[@]}" \
   --max-model-len "${ULTRON_VLLM_MAX_MODEL_LEN}" \
   --host 127.0.0.1 \

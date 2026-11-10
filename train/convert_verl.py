@@ -16,19 +16,20 @@ def trajectory_to_verl_records(
     traj: TrajectoryV1, generation: int, *, behavior_policy_id: str = ""
 ) -> list[dict[str, Any]]:
     traj.validate()
-    if traj.terminal.reason_code is ReasonCode.INFRA_FAIL:
+    if traj.terminal.reason_code is ReasonCode.INFRA_FAIL or not traj.trainable:
         return []
     if not traj.steps:
         raise ValueError("cannot convert an empty trajectory")
     gate = format_gate(traj.steps)
     rewards = [step.turn_reward * gate for step in traj.steps]
     returns = return_to_go(rewards)
-    policy = behavior_policy_id or traj.adapter_id
+    policy = behavior_policy_id or traj.behavior_policy_id or traj.adapter_id
     return [
         {
             "prompt": step.prompt_token_ids,
             "response": step.assistant_token_ids,
             "assistant_mask": step.assistant_mask,
+            "behavior_log_probs": step.behavior_log_probs,
             "reward": reward,
             "data_source": "ultron",
             "extra_info": {

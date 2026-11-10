@@ -68,6 +68,23 @@ ultron_stage_fingerprint() {
   } | cksum | awk '{print $1 "-" $2}'
 }
 
+# Optional newline-separated immutable result files. These fingerprints make
+# resume reject a deleted or modified result even when its command is unchanged.
+ultron_stage_outputs_fingerprint() {
+  local path
+  [[ -n "${ULTRON_STAGE_OUTPUT_FILES:-}" ]] || { printf 'none\n'; return 0; }
+  while IFS= read -r path; do
+    [[ -z "${path}" || -f "${path}" ]] || return 1
+  done <<< "${ULTRON_STAGE_OUTPUT_FILES}"
+  {
+    while IFS= read -r path; do
+      [[ -n "${path}" ]] || continue
+      printf 'path\0%s\0' "${path}"
+      cksum < "${path}" || return 1
+    done <<< "${ULTRON_STAGE_OUTPUT_FILES}"
+  } | cksum | awk '{print $1 "-" $2}'
+}
+
 ultron_advance_pipeline_chain() {
   local stage="$1" fingerprint="$2" completion_id="$3"
   ULTRON_PIPELINE_CHAIN_FINGERPRINT="$(
@@ -129,6 +146,18 @@ ultron_restore_stage_traps() {
   return 0
 }
 
+ultron_record_stage_phase() {
+  local state="$1" status="${2:-}"
+  [[ -n "${ULTRON_COMPUTE_LEDGER:-}" && -n "${ULTRON_ALLOCATION_ID:-}" ]] || return 0
+  local extra=()
+  [[ -z "${status}" ]] || extra+=(--status "${status}")
+  "${ULTRON_PYTHON}" -m ultron.train.compute phase \
+    --ledger "${ULTRON_COMPUTE_LEDGER}" --phase "${ULTRON_ACTIVE_STAGE_NAME}" \
+    --state "${state}" --allocation-id "${ULTRON_ALLOCATION_ID}" \
+    --attempt-id "${ULTRON_ACTIVE_STAGE_RUN_ID}:${ULTRON_ACTIVE_STAGE_NAME}:${ULTRON_ACTIVE_STAGE_ATTEMPT}" \
+    ${extra[@]+"${extra[@]}"}
+}
+
 ultron_write_active_stage_state() {
   local path="$1" state="$2"
   shift 2
@@ -151,6 +180,7 @@ ultron_interrupt_stage() {
   local signal="$1" status="$2"
   trap - INT TERM
   if [[ -n "${ULTRON_ACTIVE_STAGE_RUNNING_PATH:-}" ]]; then
+    ultron_record_stage_phase end "${status}"
     ultron_write_active_stage_state \
       "${ULTRON_ACTIVE_STAGE_FAILED_PATH}" \
       failed \
@@ -189,7 +219,7 @@ ultron_run_stage() {
   local running_path="${ULTRON_PIPELINE_STATE_DIR}/${stage}.running"
   local failed_path="${ULTRON_PIPELINE_STATE_DIR}/${stage}.failed"
   local lock_path="${ULTRON_PIPELINE_STATE_DIR}/${stage}.lock"
-  local fingerprint
+  local fingerprint outputs_fingerprint=""
   fingerprint="$(ultron_stage_fingerprint "$@")"
 
   local lock_status=0
@@ -213,7 +243,12 @@ ultron_run_stage() {
   fi
 
   if [[ "${ULTRON_PIPELINE_RESUME:-1}" != "0" && -f "${done_path}" ]]; then
-    if grep -q "^fingerprint=${fingerprint}$" "${done_path}"; then
+    outputs_fingerprint="$(ultron_stage_outputs_fingerprint)" || outputs_fingerprint="missing"
+    local saved_outputs
+    saved_outputs="$(ultron_stage_state_value "${done_path}" outputs_fingerprint 2>/dev/null || true)"
+    saved_outputs="${saved_outputs:-none}"
+    if grep -q "^fingerprint=${fingerprint}$" "${done_path}" \
+      && [[ "${outputs_fingerprint}" == "${saved_outputs}" ]]; then
       local completion_id
       completion_id="$(ultron_stage_state_value "${done_path}" completion_id 2>/dev/null || true)"
       completion_id="${completion_id:-legacy-${fingerprint}}"
@@ -252,20 +287,32 @@ ultron_run_stage() {
     echo "=== Stage ${stage}: attempt ${attempt}/${attempts} ==="
     rm -f "${failed_path}"
     ultron_write_active_stage_state "${running_path}" running
+    ultron_record_stage_phase start
     if "$@"; then
+      if ! outputs_fingerprint="$(ultron_stage_outputs_fingerprint)"; then
+        ultron_write_active_stage_state "${failed_path}" failed "status=2" "reason=missing_outputs"
+        rm -f "${running_path}"
+        ultron_release_stage_lock "${lock_path}"
+        ultron_restore_stage_traps "${previous_int_trap}" "${previous_term_trap}"
+        echo "Stage ${stage} returned success without its required outputs." >&2
+        ultron_record_stage_phase end 2
+        return 2
+      fi
       local completion_id
       completion_id="$(date -u '+%Y%m%dT%H%M%SZ')-$$-${RANDOM}"
       ultron_write_active_stage_state \
-        "${done_path}" done "status=0" "completion_id=${completion_id}"
+        "${done_path}" done "status=0" "completion_id=${completion_id}" "outputs_fingerprint=${outputs_fingerprint}"
       rm -f "${running_path}" "${failed_path}"
       ultron_release_stage_lock "${lock_path}"
       ultron_restore_stage_traps "${previous_int_trap}" "${previous_term_trap}"
       ultron_advance_pipeline_chain "${stage}" "${fingerprint}" "${completion_id}"
       echo "=== Stage ${stage}: complete ==="
+      ultron_record_stage_phase end 0
       return 0
     else
       status=$?
     fi
+    ultron_record_stage_phase end "${status}"
     case "${status}" in
       2|126|127)
         ultron_write_active_stage_state "${failed_path}" failed "status=${status}"

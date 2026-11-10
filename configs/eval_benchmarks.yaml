@@ -3,7 +3,7 @@
 
 mode_by_generation:
   2: light
-  4: full
+  3: full
 default_mode: smoke
 
 roles:
@@ -61,6 +61,8 @@ benchmarks:
     binary: harbor
     metric: success_rate
     dataset: terminal-bench/terminal-bench@latest
+    # Set tasks_path to a frozen local Harbor task directory for verified reuse.
+    # Registry aliases execute normally but are not cacheable.
     # Official: uv tool install harbor
     # then `harbor run -d terminal-bench/terminal-bench@latest --agent terminus-2 --model openai/<served>`.
     smoke:

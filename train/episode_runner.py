@@ -43,6 +43,8 @@ class EpisodeConfig:
     defender_ckpt: str
     shaping: bool = True
     prep_turns: int = 0
+    episode_id: str | None = None
+    learner_role: Role | None = None
 
 
 class EpisodeRunner:
@@ -121,7 +123,7 @@ class EpisodeRunner:
             unresolved=unresolved,
             ordinary_user_ok=probe.ordinary_user_ok,
         )
-        episode_id = str(uuid4())
+        episode_id = cfg.episode_id or str(uuid4())
         return [
             self._trajectory(cfg, episode_id, Role.ATTACKER, attacker_steps, terminal, vm),
             self._trajectory(cfg, episode_id, Role.DEFENDER, defender_steps, terminal, vm),
@@ -169,6 +171,8 @@ class EpisodeRunner:
             steps=steps,
             terminal=terminal,
             isolation_backend=vm.isolation,
+            behavior_policy_id=cfg.attacker_ckpt if role is Role.ATTACKER else cfg.defender_ckpt,
+            trainable=cfg.learner_role is None or cfg.learner_role is role,
         )
 
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import http.client
 import json
-import os
 import re
 import socket
 import sys
@@ -15,9 +14,10 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from ultron.cli.model import (
-    JobEnded, JobMeta, ModelResponseDelta, ModelResponseFinished, ModelResponseStarted,
+    JobEnded, JobError, JobMeta, ModelResponseDelta, ModelResponseFinished,
+    ModelResponseStarted,
 )
-from ultron.cli.responses import ResponseArchive
+from ultron.cli.responses import DurableGroupWriter, ResponseArchive
 from ultron.env.backend import IsolationBackend
 from ultron.train.schema_v1 import Role
 
@@ -78,7 +78,8 @@ class _Capture:
             generation=proxy.generation, profile_id="model-response",
             isolation=IsolationBackend.DOCKER, episodes_planned=1, turns_per_side=1,
             group_id=run or "capture",
-        ), proxy.responses_dir)
+        ), proxy.responses_dir, sync_interval_s=proxy.sync_interval_s,
+            sync_bytes=proxy.sync_bytes)
         self.archive.document["capture"] = {
             "role": self.role.value,
             "request_path": path,
@@ -91,8 +92,14 @@ class _Capture:
             "raw_response_file": "raw-response.body",
             "provider_events_file": "provider-events.jsonl",
         }
-        self.raw = self.archive.path.with_name("raw-response.body").open("wb")
-        self.provider_events = self.archive.path.with_name("provider-events.jsonl").open("w", encoding="utf-8")
+        self.raw = DurableGroupWriter(
+            self.archive.path.with_name("raw-response.body"), "wb",
+            sync_interval_s=proxy.sync_interval_s, sync_bytes=proxy.sync_bytes,
+        )
+        self.provider_events = DurableGroupWriter(
+            self.archive.path.with_name("provider-events.jsonl"), "w",
+            sync_interval_s=proxy.sync_interval_s, sync_bytes=proxy.sync_bytes,
+        )
         self.started = time.monotonic()
         self.ids: dict[int, str] = {}
         self.lock = threading.RLock()
@@ -138,13 +145,11 @@ class _Capture:
                 self.error = f"Upstream HTTP {status}"
             self.archive.flush()
 
-    def feed(self, chunk: bytes) -> None:
+    def feed(self, chunk: bytes) -> bool:
         with self.lock:
             if self.closed:
-                return
+                return self.done
             self.raw.write(chunk)
-            self.raw.flush()
-            os.fsync(self.raw.fileno())
             try:
                 decoded = self.decoder.decompress(chunk) if self.decoder else chunk
                 if self.sse:
@@ -165,6 +170,7 @@ class _Capture:
                     self.body.extend(decoded)
             except (ValueError, UnicodeError, zlib.error) as exc:
                 self.error = f"Invalid provider response: {type(exc).__name__}"
+            return self.done
 
     def _payload(self, payload, *, streaming: bool) -> None:
         if not isinstance(payload, dict):
@@ -174,8 +180,6 @@ class _Capture:
             self.error = "Provider returned an error payload"
         if streaming:
             self.provider_events.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            self.provider_events.flush()
-            os.fsync(self.provider_events.fileno())
         else:
             self.archive.document["provider_response"] = payload
         choices = payload.get("choices", [])
@@ -205,32 +209,46 @@ class _Capture:
         with self.lock:
             if self.closed:
                 return
-            if status == "complete":
-                if self.decoder is not None and not self.decoder.eof:
-                    self.error = self.error or "Compressed provider response ended early"
-                if self.sse and not self.done:
-                    self.error = self.error or "Provider stream ended before [DONE]"
-                elif not self.sse:
-                    try:
-                        self._payload(json.loads(self.body), streaming=False)
-                    except (ValueError, UnicodeError):
-                        self.error = self.error or "Provider response was not valid JSON"
-                if self.error:
-                    status, error = "error", self.error
             try:
+                self.raw.barrier()
+                self.provider_events.barrier()
+                if status == "complete":
+                    if self.decoder is not None and not self.decoder.eof:
+                        self.error = self.error or "Compressed provider response ended early"
+                    if self.sse and not self.done:
+                        self.error = self.error or "Provider stream ended before [DONE]"
+                    elif not self.sse:
+                        try:
+                            self._payload(json.loads(self.body), streaming=False)
+                        except (ValueError, UnicodeError):
+                            self.error = self.error or "Provider response was not valid JSON"
+                    if self.error:
+                        status, error = "error", self.error
+                now = self._clock()
+                events = []
                 for response_id in self.ids.values():
-                    self.archive.record(ModelResponseFinished(
+                    events.append(ModelResponseFinished(
                         self.episode, self.turn, self.role, response_id, status,
-                        self._clock(), error=error,
+                        now, error=error,
                     ))
                 if status == "complete":
-                    self.archive.record(JobEnded(self._clock(), self._clock()))
+                    events.append(JobEnded(now, now))
                 else:
-                    self.archive.finish(status, error)
+                    events.append(JobError(
+                        error or "Response recording stopped",
+                        "cancel" if status == "cancelled" else "drive", now,
+                    ))
+                self.archive.record_many(events)
+            except OSError as exc:
+                try:
+                    self.archive.finish("error", f"Response recording failed: {exc}")
+                except OSError:
+                    pass
+                raise
             finally:
                 self.closed = True
-                self.raw.close()
-                self.provider_events.close()
+                self.raw.close(durable=False)
+                self.provider_events.close(durable=False)
 
 
 class CaptureProxy:
@@ -238,7 +256,8 @@ class CaptureProxy:
 
     def __init__(self, upstream_url: str, role: Role, generation: int = 0,
                  responses_dir: Path | None = None, listen_host: str = "127.0.0.1",
-                 listen_port: int = 0) -> None:
+                 listen_port: int = 0, *, sync_interval_s: float = 0.05,
+                 sync_bytes: int = 256 * 1024) -> None:
         upstream = urlsplit(upstream_url)
         if upstream.scheme not in ("http", "https") or not upstream.hostname:
             raise ValueError("upstream_url must be an HTTP or HTTPS URL")
@@ -254,6 +273,8 @@ class CaptureProxy:
         self.role = Role(role)
         self.generation = generation
         self.responses_dir = responses_dir
+        self.sync_interval_s = sync_interval_s
+        self.sync_bytes = sync_bytes
         self.stopping = threading.Event()
         self._lock = threading.Lock()
         self._active: dict[http.client.HTTPConnection, _Capture | None] = {}
@@ -370,13 +391,19 @@ class CaptureProxy:
             headers_sent = True
             expected = None if handler.command == "HEAD" or upstream.status in (204, 304) else upstream.length
             received = 0
+            held = bytearray()
             while True:
                 chunk = upstream.read1(65536)
                 if not chunk:
                     break
                 received += len(chunk)
+                completed = False
                 if capture:
-                    _recording(capture.feed, chunk)
+                    completed = _recording(capture.feed, chunk)
+                final_sized_chunk = capture is not None and expected is not None and received == expected
+                if held or completed or final_sized_chunk:
+                    held.extend(chunk)
+                    continue
                 try:
                     handler.wfile.write(chunk)
                     handler.wfile.flush()
@@ -386,6 +413,12 @@ class CaptureProxy:
                 raise http.client.IncompleteRead(b"", expected - received)
             if capture:
                 _recording(capture.finish)
+            if held:
+                try:
+                    handler.wfile.write(held)
+                    handler.wfile.flush()
+                except OSError as exc:
+                    raise _ClientDisconnected() from exc
         except _ClientDisconnected:
             _finish_safely(capture, "cancelled", "Client disconnected")
         except _RecordingError as exc:

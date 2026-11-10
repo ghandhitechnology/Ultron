@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 from ultron.eval.benchmarks import (
@@ -50,10 +52,17 @@ def run_suite(
     ingest: tuple[Path, ...] = (),
     timeout_s: int = 0,
     strict: bool = False,
+    bindings: Path | None = None,
+    cache_dir: Path | None = None,
+    workers: int = 1,
+    resume: bool = True,
+    untrained: bool = False,
+    family: str | None = None,
+    base_model_revision: str | None = None,
 ) -> dict[str, object]:
     suite = config or load_suite_config()
     if archive_root is None:
-        pack = resolve()
+        pack = resolve(family)
         archive_root = pack.archive_root
     destination = output or (eval_root_for_archive(archive_root) / "benchmarks")
     resolved_mode = mode or mode_for_generation(generation, suite)
@@ -63,6 +72,20 @@ def run_suite(
         generation=generation,
         roles=roles,
     )
+    if untrained:
+        from .benchmarks import IterationStage
+        from ultron.train.io import atomic_write_json
+        if not base_model_revision or not re.fullmatch(r"[a-f0-9]{40}", base_model_revision):
+            raise BenchmarkError("untrained controls require a pinned --base-model-revision")
+        model = resolve(family).base_model
+        base = {"model": model, "revision": base_model_revision}
+        digest = hashlib.sha256(json.dumps(base, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        descriptor = destination / "base-policies" / f"{digest}.json"
+        if descriptor.exists() and json.loads(descriptor.read_text()) != base:
+            raise BenchmarkError("immutable base policy descriptor was modified")
+        if not descriptor.exists():
+            atomic_write_json(descriptor, base)
+        stages = [IterationStage(0, role, "untrained", -1, descriptor) for role in roles]
     jobs = build_jobs(stages, config=suite, mode=resolved_mode, output=destination)
     plan_path = write_plan(jobs, output=destination, mode=resolved_mode, generation=generation)
     rows = planned_scores(jobs)
@@ -72,9 +95,19 @@ def run_suite(
     for path in ingest:
         ingested.extend(ingest_scores(path))
     if execute:
-        rows = merge_scores(rows, execute_jobs(jobs, timeout_s=timeout_s))
+        from .execution import load_bindings
+        if not jobs:
+            raise BenchmarkError("no archived checkpoints found for evaluation")
+        try:
+            bound = load_bindings(bindings) if bindings else None
+        except (OSError, ValueError) as exc:
+            raise BenchmarkError(str(exc)) from exc
+        rows = merge_scores(rows, execute_jobs(
+            jobs, timeout_s=timeout_s, bindings=bound, workers=workers,
+            cache_dir=(cache_dir or destination / "cache") if resume else None,
+        ))
     rows = merge_scores(rows, ingested)
-    scores_path = write_scores(rows, destination)
+    scores_path = write_scores(rows, destination, replace_current=execute)
     plots = write_plots(load_scores(scores_path), destination)
     missing = incomplete_arms(load_scores(scores_path))
     payload = {
@@ -111,6 +144,13 @@ def _main() -> None:
     parser.add_argument("--ingest", type=Path, action="append", default=[])
     parser.add_argument("--timeout", type=int, default=0)
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--bindings", type=Path, help="Immutable checkpoint-to-server bindings JSON.")
+    parser.add_argument("--cache-dir", type=Path)
+    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--no-resume", action="store_true")
+    parser.add_argument("--untrained", action="store_true", help="Evaluate base-model controls for both roles.")
+    parser.add_argument("--family")
+    parser.add_argument("--base-model-revision")
     args = parser.parse_args()
     if args.generation is not None and args.generation < 0:
         parser.error("--generation must be >= 0")
@@ -135,6 +175,13 @@ def _main() -> None:
             ingest=tuple(args.ingest),
             timeout_s=args.timeout,
             strict=args.strict,
+            bindings=args.bindings,
+            cache_dir=args.cache_dir,
+            workers=args.workers,
+            resume=not args.no_resume,
+            untrained=args.untrained,
+            family=args.family,
+            base_model_revision=args.base_model_revision,
         )
     except BenchmarkError as exc:
         raise SystemExit(str(exc)) from exc

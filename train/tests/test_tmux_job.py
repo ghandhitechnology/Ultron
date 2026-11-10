@@ -233,27 +233,31 @@ def test_wrap_recovers_an_exited_session(job_env: dict[str, str], tmp_path: Path
 
 
 def test_wrap_run_generation_detaches(job_env: dict[str, str]) -> None:
+    from ultron.train.pipeline import build_plan
+    session = build_plan(generation=0).environ()["ULTRON_STUDY_SESSION"] + "-gen0"
+    env = {**job_env, "ULTRON_MODEL_FAMILY": "qwen-8b", "ULTRON_STUDY_VARIANT": "adaptive-history", "ULTRON_STUDY_SEED": "0", "ULTRON_STUDY_RUN_ID": "default"}
+    env.pop("ULTRON_GRPO_ADAPTER_MANIFEST", None)
     result = subprocess.run(
         ["bash", str(ROOT / "scripts" / "run_generation.sh"), "0"],
-        env=job_env,
+        env=env,
         text=True,
         capture_output=True,
         timeout=10,
     )
     assert result.returncode == 0, result.stderr
-    assert "Started ultron-gen-0" in result.stdout
+    assert f"Started {session}" in result.stdout
     try:
         wait_until(
-            lambda: "=== Ultron generation 0 ==="
-            in run_job(["logs", "ultron-gen-0"], job_env).stdout
-            and "Set ULTRON_ROLLOUT_COMMAND"
-            in run_job(["logs", "ultron-gen-0"], job_env).stdout
+            lambda: "=== Ultron generation 0:"
+            in run_job(["logs", session], env).stdout
+            and "ULTRON_GRPO_ADAPTER_MANIFEST"
+            in run_job(["logs", session], env).stdout
         )
-        logs = run_job(["logs", "ultron-gen-0"], job_env).stdout
-        assert "=== Ultron generation 0 ===" in logs
+        logs = run_job(["logs", session], env).stdout
+        assert "=== Ultron generation 0:" in logs
         assert "=== Ultron generation ultron-gen-0 ===" not in logs
     finally:
-        run_job(["stop", "ultron-gen-0"], job_env)
+        run_job(["stop", session], env)
 
 
 def test_rollout_worker_preserves_arguments_when_wrapped(

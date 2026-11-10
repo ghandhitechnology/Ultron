@@ -379,6 +379,92 @@ def test_recording_failure_before_headers_is_explicit_503(proxy, backend, monkey
     assert "Response recording failed" in capsys.readouterr().err
 
 
+def test_final_sse_marker_waits_for_durable_capture(proxy, backend, monkeypatch):
+    from ultron.cli.responses import DurableGroupWriter
+
+    entered = threading.Event()
+    release_sync = threading.Event()
+    original_barrier = DurableGroupWriter.barrier
+    blocked = False
+
+    def block_raw_completion(writer):
+        nonlocal blocked
+        if writer.path.name == "raw-response.body" and not blocked:
+            blocked = True
+            entered.set()
+            assert release_sync.wait(5)
+        return original_barrier(writer)
+
+    monkeypatch.setattr(DurableGroupWriter, "barrier", block_raw_completion)
+    connection, response, _ = request(proxy, {"model": "test", "stream": True})
+    assert b"hello " in response.readline()
+    backend[1].set()
+    assert entered.wait(5)
+    tail = []
+    reader = threading.Thread(target=lambda: tail.append(response.read()))
+    reader.start()
+    reader.join(0.05)
+    assert reader.is_alive()
+    release_sync.set()
+    reader.join(5)
+    assert not reader.is_alive()
+    assert b"data: [DONE]" in tail[0]
+    connection.close()
+
+
+def test_final_capture_sync_failure_withholds_sse_completion(
+    proxy, backend, tmp_path, monkeypatch, capsys,
+):
+    from ultron.cli.responses import DurableGroupWriter
+
+    original_barrier = DurableGroupWriter.barrier
+
+    def fail_raw_completion(writer):
+        if writer.path.name == "raw-response.body":
+            raise OSError("No space left on device")
+        return original_barrier(writer)
+
+    monkeypatch.setattr(DurableGroupWriter, "barrier", fail_raw_completion)
+    connection, response, _ = request(proxy, {"model": "test", "stream": True})
+    first = response.readline()
+    assert b"hello " in first
+    backend[1].set()
+    assert b"data: [DONE]" not in first + response.read()
+    connection.close()
+    _, document = saved(tmp_path)[0]
+    assert document["status"] == "error"
+    assert "Response recording failed" in document["error"]
+    assert "Response recording failed" in capsys.readouterr().err
+
+
+def test_final_snapshot_failure_withholds_completion_and_recovers_error(
+    proxy, backend, tmp_path, monkeypatch, capsys,
+):
+    from ultron.cli import responses
+
+    original_atomic_write = responses.atomic_write_text
+    failed = False
+
+    def fail_complete_snapshot(path, content, **kwargs):
+        nonlocal failed
+        if path.name == "responses.json" and '"status": "complete"' in content and not failed:
+            failed = True
+            raise OSError("snapshot device failure")
+        return original_atomic_write(path, content, **kwargs)
+
+    monkeypatch.setattr(responses, "atomic_write_text", fail_complete_snapshot)
+    connection, response, _ = request(proxy, {"model": "test", "stream": True})
+    first = response.readline()
+    assert b"hello " in first
+    backend[1].set()
+    assert b"data: [DONE]" not in first + response.read()
+    connection.close()
+    _, document = saved(tmp_path)[0]
+    assert document["status"] == "error"
+    assert "snapshot device failure" in document["error"]
+    assert "Response recording failed" in capsys.readouterr().err
+
+
 def test_shutdown_still_stops_server_when_recording_fails(proxy, backend, monkeypatch, capsys):
     from ultron.cli.responses import ResponseArchive
 
@@ -388,7 +474,7 @@ def test_shutdown_still_stops_server_when_recording_fails(proxy, backend, monkey
     def no_space(*_args, **_kwargs):
         raise OSError("No space left on device")
 
-    monkeypatch.setattr(ResponseArchive, "record", no_space)
+    monkeypatch.setattr(ResponseArchive, "record_many", no_space)
     started = time.monotonic()
     proxy.shutdown()
     assert time.monotonic() - started < 2

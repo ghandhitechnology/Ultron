@@ -12,7 +12,7 @@ Ultron is a research trainer for environment-grounded asymmetric self-play. Sepa
 
 See [docs/FINAL_STUDY.md](docs/FINAL_STUDY.md) for the locked experiment matrix. `python -m ultron.train.study check` verifies that the default family, thinking flag, and GRPO configs still match that lock.
 
-This repository is research-ready scaffolding. Pure Python contracts, reward logic, PFSP sampling, DPO pair extraction, configuration, launch scripts, and tests run without GPUs or guests. vLLM serving and GRPO or DPO training run on any NVIDIA host. Isolated rollouts need Docker (`scripts/bootstrap_cloud.sh`) or native KVM. See [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
+The Python contracts, scheduler, reward logic, PFSP sampling, DPO pair extraction, launch scripts, and tests run without GPUs or guests. The study executor targets two H100 80 GB GPUs and native KVM. Production rollouts require a configured Pi/KVM runtime; training requires a recorded-trajectory consumer. See [the H100 execution guide](docs/H100_EXECUTION.md) for these interfaces and the throughput pilot, and [the server guide](docs/SERVER_GUIDE.md) for host setup.
 
 ## Server requirements
 
@@ -20,16 +20,18 @@ Python unit tests, reward logic, and `ultron-sim demo` need no GPU. Isolated rol
 
 Supported bases are Qwen 4B, Qwen 8B, Gemma 12B, and the abliterated Gemma 12B checkpoint. The checked-in default is `Qwen/Qwen3-8B` with thinking enabled. `Qwen/Qwen3.5-4B` is the secondary comparison pack. Select a checked-in pack with `--family` or `ULTRON_MODEL_FAMILY` only on a host that meets its row. Qwen 27B, 35B, and larger Qwen MoE checkpoints are not supported.
 
-Figures assume two vLLM processes (attacker and defender), BF16 weights, `max_model_len` 32768, LoRA rank 64, 16 CPU-only guests at 2 vCPU / 4 GiB each, and GRPO or DPO after both servers stop. Guests never take a GPU. Pin one GPU per role. Do not overlap vLLM and FSDP.
+The study baseline is two H100 80 GB GPUs. Each GPU hosts a vLLM replica serving both roles and immutable historical adapters. BF16 weights, context length 32768, LoRA rank 64, and 16 CPU-only guests at 2 vCPU / 4 GiB remain unchanged. GRPO and DPO reuse the pair after both servers stop. The settings live in [`configs/h100.yaml`](configs/h100.yaml).
 
 | Variant | CPU | Host RAM | Recommended GPU setup |
 | --- | --- | --- | --- |
-| `Qwen/Qwen3-8B` (locked default) | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB or 2× A100 80 GB with the same one-GPU-per-role pin. 2× L40S 48 GB only if you cut guest concurrency. |
-| `Qwen/Qwen3.5-4B` (secondary comparison) | 32 physical cores; 64 safer | 128 GB | 2× A100 80 GB, or 2× H100 80 GB. Attacker on GPU 0, defender on GPU 1 (`ULTRON_ATTACKER_GPU` / `ULTRON_DEFENDER_GPU`). |
+| `Qwen/Qwen3-8B` (locked default) | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB, one replica per GPU, both roles on each replica. |
+| `Qwen/Qwen3.5-4B` (secondary comparison) | 32 physical cores; 64 safer | 192 GB shared study host | Same H100 pair and guest pool as the 8B comparison. |
 | `google/gemma-4-12B-it` | 32 physical cores; 64 safer | 192 GB | 2× H100 80 GB preferred; 2× A100 80 GB is the fallback. Skip 24 GB cards. 48 GB cards need a smaller guest pool. |
 | `huihui-ai/Huihui-gemma-4-12B-it-abliterated` | 32 physical cores; 64 safer | 192 GB | Same as Gemma 12B. Requires vLLM 0.23 or newer for native Gemma 4 Unified support. |
 
 Every row also needs x86-64, Ubuntu 22.04 or 24.04, an NVIDIA datacenter driver, and at least 1 TB local NVMe for the base image, overlays, Hugging Face cache, traces, and checkpoints. Docker guests use `scripts/bootstrap_cloud.sh` and do not need `/dev/kvm`. Native KVM guests need `/dev/kvm` and the 32-core floor if you keep 16 VMs.
+
+The locked final study uses KVM. Docker remains available for development and separate experiments.
 
 `python -m ultron.train.capability` (or the console **Model capability** action) reads CPU, RAM, and `nvidia-smi` and prints which of those four packs can train here. `bootstrap_bm.sh` and `bootstrap_cloud.sh` run that check first. They only continue to kvm, docker, and the rest of the host gates if at least one family fits — or the pinned `ULTRON_MODEL_FAMILY` does.
 
@@ -85,23 +87,23 @@ Do not place guest images, traces, model weights, credentials, or checkpoints in
 Generation, rollout, GRPO, DPO, and vLLM launchers start in named tmux sessions so they keep running after SSH disconnects, hangup, or a closed terminal. Nested calls from `run_generation.sh` stay in the parent session.
 
 ```bash
-./scripts/run_generation.sh 0
+./scripts/run_generation.sh --seed 0 --run-id study-1 0
 ./scripts/serve_vllm_attacker.sh
 ./scripts/tmux_job.sh list
-./scripts/tmux_job.sh attach ultron-gen-0
-./scripts/tmux_job.sh logs ultron-gen-0
 ./scripts/tmux_job.sh stop ultron-vllm-attacker
 ```
 
 Set `ULTRON_NO_TMUX=1` to run in the current shell. See [docs/SERVER_GUIDE.md](docs/SERVER_GUIDE.md).
 
-Generation stages record completion, failure, and active process state under `data/job-state`. A stage lock rejects a second process trying to run the same stage. Resume checks include the command and preceding stage completions, so rerunning an upstream stage also invalidates downstream completions. A failed rerun removes its old success marker, and interrupted stages are not retried automatically.
+Study session names use a short family prefix and identity hash. Use `tmux_job.sh attach SESSION` or `tmux_job.sh logs SESSION` with the name shown by `list`.
+
+Generation stages record completion, failure, and active process state under the study run's `job-state` directory. Stage locks reject overlapping attempts, and GPU leases prevent separate runs from using the same devices. Resume checks include frozen inputs, output artifacts, the command, and preceding stage completions. A failed rerun removes its old success marker, and interrupted stages are not retried automatically.
 
 Set `ULTRON_PIPELINE_INPUT_KEY` to a new value when changing configuration or data outside the stage command. Set `ULTRON_PIPELINE_RESUME=0` to rerun all stages.
 
 ## Model families
 
-A job pins one base-model family. The unset family is `qwen-8b` (`Qwen/Qwen3-8B`), which stores checkpoints and archives under `data/families/qwen-8b/`. The secondary comparison pack is `qwen-4b` (`Qwen/Qwen3.5-4B`). It uses the top-level `configs/` files and stores checkpoints and archives under `data/checkpoints` and `data/archives`. Alternative families are `gemma` (`google/gemma-4-12B-it`) and `gemma-abliterated` (`huihui-ai/Huihui-gemma-4-12B-it-abliterated`). They live under `configs/families/<name>/` and write outputs under `data/families/<name>/`.
+A job pins one base-model family. The default is `qwen-8b`, using `Qwen/Qwen3-8B`. The secondary comparison is `qwen-4b`, using `Qwen/Qwen3.5-4B`. Study generation outputs use `data/study/<model>/<variant>/seed<seed>/<run-id>/`. Standalone family tools retain their existing paths: `data/families/qwen-8b/` for 8B and `data/checkpoints` and `data/archives` for 4B. Alternative Gemma families live under `configs/families/<name>/` and are available through standalone tools.
 
 <p align="center">
   <img src="docs/screenshots/console_family_gemma.png" alt="Experiment console with the Gemma family pin in the header" width="900" />
@@ -119,7 +121,7 @@ Press `m` to jump to the selector. The available names are `qwen-4b`, `qwen-8b`,
   <img src="docs/screenshots/console_family_qwen8b.png" alt="Experiment console with the Qwen 8B family pin" width="900" />
 </p>
 
-The unset family writes under `data/families/qwen-8b/`. `qwen-4b` stays on `data/checkpoints` and `data/archives`.
+Study runs keep the family, method, seed, and run ID in their output namespace. Standalone tools can select a family independently.
 
 ```bash
 # Default (qwen-8b, thinking on)

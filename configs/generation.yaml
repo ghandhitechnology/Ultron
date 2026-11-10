@@ -1,5 +1,6 @@
 outer_generations: 4
 episodes_per_generation: 2048
+episodes_rounding: ceil_group
 train_profiles: [web, db, build-box, workstation]
 grpo:
   group_size: 6
@@ -27,7 +28,7 @@ eval:
   gen2_light:
     procedural_n: 20
     intercode_smoke: true
-  gen4_full: tier3
+  gen3_full: tier3
   benchmarks:
     after_tests: true
     source: archives

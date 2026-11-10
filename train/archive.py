@@ -122,12 +122,14 @@ def copy_adapter_files(source: Path, destination: Path) -> list[dict[str, Any]]:
         shutil.rmtree(destination)
     destination.mkdir(parents=True)
     records: list[dict[str, Any]] = []
-    for item in sorted(source.iterdir()):
+    for item in sorted(source.rglob("*")):
         if not item.is_file():
             continue
-        target = destination / item.name
+        relative = item.relative_to(source)
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(item, target)
-        records.append({"name": item.name, "sha256": file_digest(target), "bytes": target.stat().st_size})
+        records.append({"name": relative.as_posix(), "sha256": file_digest(target), "bytes": target.stat().st_size})
     if not any(record["name"] == ADAPTER_CONFIG for record in records):
         raise FileNotFoundError(f"{source} is missing {ADAPTER_CONFIG}")
     return records
@@ -299,6 +301,11 @@ def archive_generation(
 ) -> dict[str, Any]:
     if generation < 0:
         raise ValueError("generation must be >= 0")
+    if os.environ.get("ULTRON_RUN_ROOT"):
+        run_root = Path(os.environ["ULTRON_RUN_ROOT"])
+        checkpoint_root = checkpoint_root or run_root / "checkpoints"
+        archive_root = archive_root or run_root / "archives"
+        pfsp_manifest = pfsp_manifest or run_root / "checkpoints/pfsp_pool.json"
     resolved_family: str | None = None
     if checkpoint_root is None or archive_root is None or model_config is None or pfsp_manifest is None:
         family_pack = resolve()
@@ -311,7 +318,27 @@ def archive_generation(
             model_config = family_pack.model_config
         if pfsp_manifest is None:
             pfsp_manifest = family_pack.pfsp_manifest
-    selected = [select_adapter(checkpoint_root, generation, role) for role in (Role.ATTACKER, Role.DEFENDER)]
+    study_identity: dict[str, Any] | None = None
+    receipts: dict[str, dict[str, Any]] = {}
+    if os.environ.get("ULTRON_RUN_ROOT"):
+        from .pipeline import plan_from_environ
+        from .training import receipt_path, validated_receipt
+
+        plan = plan_from_environ(generation=generation)
+        if checkpoint_root.resolve() != (plan.run_root / "checkpoints").resolve():
+            raise ValueError("checkpoint root differs from the active study namespace")
+        study_identity = plan.to_dict()["identity"]
+        selected = []
+        for role in (Role.ATTACKER, Role.DEFENDER):
+            stage = "dpo" if role is Role.ATTACKER and plan.dpo else "grpo"
+            receipt = receipt_path(plan, role.value, stage)
+            result = validated_receipt(receipt, identity=study_identity)
+            if result.get("generation") != generation or result.get("role") != role.value or result.get("objective") != stage:
+                raise ValueError("training receipt does not match the checkpoint being archived")
+            receipts[role.value] = result
+            selected.append(SelectedAdapter(role, stage, receipt.parent, Path(result["adapter_path"])))
+    else:
+        selected = [select_adapter(checkpoint_root, generation, role) for role in (Role.ATTACKER, Role.DEFENDER)]
     target = archive_dir(archive_root, generation)
     target.mkdir(parents=True, exist_ok=True)
     checkpoints = collect_generation_checkpoints(checkpoint_root, generation, target)
@@ -326,6 +353,9 @@ def archive_generation(
             "path": str(dest),
             "files": files,
         }
+        if adapter.role.value in receipts:
+            result = receipts[adapter.role.value]
+            roles[adapter.role.value].update({"checkpoint_id": result["checkpoint_id"], "sha256": result["adapter_sha256"]})
     manifest = {
         "generation": generation,
         "base_model": load_base_model(model_config),
@@ -345,6 +375,9 @@ def archive_generation(
         ],
     }
     family = _family_label(model_config, resolved_family)
+    if study_identity is not None:
+        manifest["identity"] = study_identity
+        manifest["base_model_revision"] = receipts["attacker"]["model_revision"]
     if family is not None:
         manifest["family"] = family
     manifest_path = target / "manifest.json"
@@ -384,6 +417,11 @@ def archive_all_generations(
     pfsp_manifest: Path | None = None,
     pack: bool = True,
 ) -> dict[str, Any]:
+    if os.environ.get("ULTRON_RUN_ROOT"):
+        run_root = Path(os.environ["ULTRON_RUN_ROOT"])
+        checkpoint_root = checkpoint_root or run_root / "checkpoints"
+        archive_root = archive_root or run_root / "archives"
+        pfsp_manifest = pfsp_manifest or run_root / "checkpoints/pfsp_pool.json"
     if checkpoint_root is None or archive_root is None or model_config is None or pfsp_manifest is None:
         family_pack = resolve()
         if checkpoint_root is None:
@@ -433,7 +471,7 @@ def _update_pfsp(manifest_path: Path, generation: int, roles: dict[str, Any]) ->
         entries = update_pool(
             entries,
             PoolEntry(
-                checkpoint_id=f"{role.value}-gen{generation}",
+                checkpoint_id=str(info.get("checkpoint_id", f"{role.value}-gen{generation}")),
                 path=str(info["path"]),
                 role=role,
                 win_rate_vs_live=0.5,
@@ -473,10 +511,11 @@ def _main() -> None:
     except FamilyError as exc:
         print(exc, file=sys.stderr)
         raise SystemExit(2) from exc
-    checkpoint_root = args.checkpoint_root or family_pack.checkpoint_root
-    archive_root = args.archive_root or family_pack.archive_root
+    run_root = Path(os.environ["ULTRON_RUN_ROOT"]) if os.environ.get("ULTRON_RUN_ROOT") else None
+    checkpoint_root = args.checkpoint_root or (run_root / "checkpoints" if run_root else family_pack.checkpoint_root)
+    archive_root = args.archive_root or (run_root / "archives" if run_root else family_pack.archive_root)
     model_config = args.model_config or family_pack.model_config
-    pfsp_manifest = args.pfsp_manifest or family_pack.pfsp_manifest
+    pfsp_manifest = args.pfsp_manifest or (run_root / "checkpoints/pfsp_pool.json" if run_root else family_pack.pfsp_manifest)
     if args.list:
         print(json.dumps(list_archives(archive_root), indent=2))
         return

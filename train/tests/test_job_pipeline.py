@@ -155,6 +155,43 @@ def test_completed_stage_is_skipped_on_resume(tmp_path: Path) -> None:
     assert "already complete" in resumed.stdout
 
 
+def test_modified_or_missing_stage_output_invalidates_resume(tmp_path: Path) -> None:
+    state, artifact, marker = tmp_path / "state", tmp_path / "artifact", tmp_path / "ran"
+    script = f"""
+    set -euo pipefail
+    source {PIPELINE_LIB!s}
+    export ULTRON_PIPELINE_STATE_DIR={state!s}
+    export ULTRON_STAGE_OUTPUT_FILES={artifact!s}
+    ultron_pipeline_init pipeline
+    ultron_run_stage checkpoint bash -c 'printf correct > {artifact!s}; printf x >> {marker!s}'
+    """
+    assert run_bash(script).returncode == 0
+    assert run_bash(script).returncode == 0
+    assert marker.read_text() == "x"
+    artifact.write_text("changed")
+    assert run_bash(script).returncode == 0
+    assert marker.read_text() == "xx"
+    artifact.unlink()
+    assert run_bash(script).returncode == 0
+    assert marker.read_text() == "xxx"
+
+
+def test_success_without_required_outputs_does_not_complete_stage(tmp_path: Path) -> None:
+    state = tmp_path / "state"
+    script = f"""
+    set -euo pipefail
+    source {PIPELINE_LIB!s}
+    export ULTRON_PIPELINE_STATE_DIR={state!s}
+    export ULTRON_STAGE_OUTPUT_FILES={tmp_path / 'missing'!s}
+    ultron_pipeline_init pipeline
+    ultron_run_stage checkpoint true
+    """
+    result = run_bash(script)
+    assert result.returncode == 2
+    assert not (state / "checkpoint.done").exists()
+    assert read_state(state / "checkpoint.failed")["reason"] == "missing_outputs"
+
+
 def test_each_pipeline_init_writes_a_new_run_manifest_without_breaking_resume(
     tmp_path: Path,
 ) -> None:
